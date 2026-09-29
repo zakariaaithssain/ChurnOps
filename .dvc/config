@@ -1,0 +1,4 @@
+[core]
+    remote = origin
+['remote "origin"']
+    url = ~/zeco/.cache/kagglehub/datasets/kkbox-churn
