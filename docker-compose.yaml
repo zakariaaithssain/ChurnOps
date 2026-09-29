@@ -1,0 +1,16 @@
+services:
+  postgres: 
+    image: postgres
+    container_name: kkbox-db
+    ports:
+      - "5432:5432"
+    volumes:
+      - "kkbox-data:/var/lib/postgresql"
+    environment:
+      - POSTGRES_PASSWORD=5311692
+      - POSTGRES_USER=zeco
+      - POSTGRES_DB=kkbox-data
+    restart: unless-stopped
+  
+volumes:
+  kkbox-data:
