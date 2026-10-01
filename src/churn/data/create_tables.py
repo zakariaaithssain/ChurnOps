@@ -23,5 +23,7 @@ with psycopg.connect(
             if query.strip(): 
                 try:
                     cursor.execute(query)
+                    print(f"created table {idx}")
                 except Exception as e:
                     print(f"failed to execute query {idx} - error: {e}")
+                    connection.rollback()

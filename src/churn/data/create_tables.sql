@@ -12,8 +12,8 @@ CREATE TABLE Transactions (
     PlanListPrice VARCHAR(10), 
     ActualAmountPaid VARCHAR(10), 
     IsAutoRenew BOOLEAN, 
-    TransactionDate DATE,
-    MembershipExpireDate DATE, 
+    TransactionDate INT,
+    MembershipExpireDate INT, 
     IsCancel BOOLEAN,
 
     CONSTRAINT FK_Transactions_Labels 
@@ -23,10 +23,11 @@ CREATE TABLE Transactions (
 
 CREATE TABLE UserLogs (
     MsNo CHAR(44), 
-    LogDate DATE, 
+    LogDate INT, 
     Num25 INT, 
     Num50 INT, 
     Num75 INT, 
+    Num985 INT,
     Num100 INT,
     NumUnq INT, 
     TotalSecs FLOAT, 
@@ -43,7 +44,7 @@ CREATE TABLE Members (
     BD INT, 
     Gender VARCHAR(10), 
     RegisteredVia INT, 
-    RegistrationInitDate DATE,
+    RegistrationInitDate INT,
 
     CONSTRAINT FK_Members_Labels
     FOREIGN KEY (MsNo) REFERENCES Labels(MsNo)
