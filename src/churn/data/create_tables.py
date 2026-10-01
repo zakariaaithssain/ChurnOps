@@ -5,7 +5,7 @@ from pathlib import Path
 QUERIES_FILE = Path("src/churn/data/create_tables.sql")
 with open(QUERIES_FILE, "r") as file: 
     content = file.read()
-    #psycopg cursors can't execute multiple comma separated queries
+    #psycopg cursor can't execute multiple queries
     queries = content.split(";")
 
 

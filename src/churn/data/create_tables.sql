@@ -14,10 +14,7 @@ CREATE TABLE Transactions (
     IsAutoRenew BOOLEAN, 
     TransactionDate INT,
     MembershipExpireDate INT, 
-    IsCancel BOOLEAN,
-
-    CONSTRAINT FK_Transactions_Labels 
-    FOREIGN KEY (MsNo) REFERENCES Labels(MsNo)
+    IsCancel BOOLEAN
 );
 
 
@@ -30,10 +27,7 @@ CREATE TABLE UserLogs (
     Num985 INT,
     Num100 INT,
     NumUnq INT, 
-    TotalSecs FLOAT, 
-
-    CONSTRAINT FK_UserLogs_Labels 
-    FOREIGN KEY (MsNo) REFERENCES Labels(MsNo)
+    TotalSecs FLOAT 
 );
 
 --- members_v3
@@ -44,9 +38,6 @@ CREATE TABLE Members (
     BD INT, 
     Gender VARCHAR(10), 
     RegisteredVia INT, 
-    RegistrationInitDate INT,
-
-    CONSTRAINT FK_Members_Labels
-    FOREIGN KEY (MsNo) REFERENCES Labels(MsNo)
+    RegistrationInitDate INT
 );
 
