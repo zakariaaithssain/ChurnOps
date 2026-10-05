@@ -120,6 +120,15 @@ def build_round(schema):
 
 
 
+def build_features(schema):
+    cfg = ROUNDS[schema]
+    # client-side binding: the build SQL has parameters and several statements
+    with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
+        c.execute("SET work_mem = '512MB'")
+        # build_features.sql only needs %(cutoff)s (90d windows are hardcoded)
+        run_sql_file(c, "build_features.sql", {"cutoff": cfg["cutoff"]})
+
+
 def reset():
     if input("Drops schemas raw, r1, r2 and all their data. Type 'yes': ") != "yes":
         return
@@ -134,6 +143,15 @@ if __name__ == "__main__":
     for name in ("reset", "init", "load-raw"):
         sub.add_parser(name)
     sub.add_parser("round").add_argument("schema", choices=ROUNDS)
+    sub.add_parser("build-features").add_argument("schema", choices=ROUNDS)
     a = p.parse_args()
-    {"reset": reset, "init": init, "load-raw": load_raw}.get(
-        a.cmd, lambda: build_round(a.schema))()
+    if a.cmd == "reset":
+        reset()
+    elif a.cmd == "init":
+        init()
+    elif a.cmd == "load-raw":
+        load_raw()
+    elif a.cmd == "round":
+        build_round(a.schema)
+    elif a.cmd == "build-features":
+        build_features(a.schema)

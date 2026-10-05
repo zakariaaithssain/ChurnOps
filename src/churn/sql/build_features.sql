@@ -1,12 +1,14 @@
+BEGIN;
+
 DROP TABLE IF EXISTS train_features;
 
 CREATE TABLE train_features AS
 WITH
 params AS (
-  SELECT %(cutoff)s AS cutoff
+  SELECT %(cutoff)s::date AS cutoff
 ),
 
--- 1) user logs: single scan, 90-day lookback, labeled users only
+-- 1) user logs: single scan over the round's userlogs (already labeled-users-only, <= cutoff)
 logs AS (
   SELECT
     x.msno,
@@ -25,10 +27,10 @@ logs AS (
     SUM(x.plays)                                                    AS plays_90d,
     SUM(x.plays) FILTER (WHERE x.logdate > p.cutoff - 30)           AS plays_30d,
 
-    SUM(x.num25 + x.num50)   / NULLIF(SUM(x.plays), 0)              AS skip_rate_90d,
-    SUM(x.num985 + x.num100) / NULLIF(SUM(x.plays), 0)              AS completion_rate_90d,
-    SUM(x.numunq)            / NULLIF(SUM(x.plays), 0)              AS repeat_ratio_90d,
-    SUM(x.secs)              / NULLIF(SUM(x.plays), 0)              AS secs_per_play_90d,
+    SUM(x.num25 + x.num50)::float   / NULLIF(SUM(x.plays), 0)       AS skip_rate_90d,
+    SUM(x.num985 + x.num100)::float / NULLIF(SUM(x.plays), 0)       AS completion_rate_90d,
+    SUM(x.numunq)::float            / NULLIF(SUM(x.plays), 0)       AS repeat_ratio_90d,
+    SUM(x.secs)                     / NULLIF(SUM(x.plays), 0)       AS secs_per_play_90d,
 
     MAX(x.secs)                                                     AS max_secs_day_90d,
     STDDEV(x.secs)                                                  AS std_secs_90d,
@@ -38,9 +40,9 @@ logs AS (
            LEAST(GREATEST(u.totalsecs, 0), 86400)                   AS secs,
            (u.num25 + u.num50 + u.num75 + u.num985 + u.num100)      AS plays
     FROM userlogs u
-    JOIN labels l USING (msno)
-    WHERE u.logdate <= (SELECT cutoff FROM params)
-      AND u.logdate >  (SELECT cutoff FROM params) - 90
+    CROSS JOIN params p
+    WHERE u.logdate <= p.cutoff
+      AND u.logdate >  p.cutoff - 90
   ) x
   CROSS JOIN params p
   GROUP BY x.msno, p.cutoff
@@ -57,11 +59,10 @@ trans_agg AS (
     COUNT(DISTINCT t.paymentmethodid)                               AS n_payment_methods,
     COUNT(DISTINCT t.paymentplandays)                               AS n_distinct_plans,
     COUNT(*) FILTER (WHERE t.actualamountpaid < t.planlistprice)    AS n_discounted,
-    SUM(t.actualamountpaid)                                         AS total_paid,
-    AVG(t.actualamountpaid)                                         AS avg_paid,
+    SUM(t.actualamountpaid)::float                                  AS total_paid,
+    AVG(t.actualamountpaid)::float                                  AS avg_paid,
     (p.cutoff - MIN(t.transactiondate))                             AS days_since_first_trans
   FROM transactions t
-  JOIN labels l USING (msno)
   CROSS JOIN params p
   WHERE t.transactiondate <= p.cutoff
   GROUP BY t.msno, p.cutoff
@@ -73,13 +74,12 @@ last_trans AS (
     t.msno,
     t.paymentmethodid                                               AS last_payment_method,
     t.paymentplandays                                               AS last_plan_days,
-    t.planlistprice                                                 AS last_list_price,
-    t.actualamountpaid                                              AS last_amount_paid,
+    t.planlistprice::float                                          AS last_list_price,
+    t.actualamountpaid::float                                       AS last_amount_paid,
     t.isautorenew                                                   AS last_is_autorenew,
     t.iscancel                                                      AS last_is_cancel,
     (t.membershipexpiredate - p.cutoff)                             AS days_to_expiry
   FROM transactions t
-  JOIN labels l USING (msno)
   CROSS JOIN params p
   WHERE t.transactiondate <= p.cutoff
   ORDER BY t.msno, t.transactiondate DESC, t.membershipexpiredate DESC
@@ -94,13 +94,14 @@ SELECT
   m.registeredvia,
   m.gender,
   CASE WHEN m.bd BETWEEN 10 AND 90 THEN m.bd END                   AS age,
-  (p.cutoff - m.registrationinitdate)                              AS days_since_registration,
+  CASE WHEN m.registrationinitdate <= p.cutoff
+       THEN p.cutoff - m.registrationinitdate END                  AS days_since_registration,
   (m.msno IS NOT NULL)                                             AS has_member_row,
 
-  COALESCE(ta.n_trans, 0)                                          AS n_trans,
-  COALESCE(ta.n_trans_90d, 0)                                      AS n_trans_90d,
-  COALESCE(ta.n_cancel, 0)                                         AS n_cancel,
-  COALESCE(ta.n_no_autorenew, 0)                                   AS n_no_autorenew,
+  ta.n_trans,
+  ta.n_trans_90d,
+  ta.n_cancel,
+  ta.n_no_autorenew,
   ta.n_payment_methods, ta.n_distinct_plans, ta.n_discounted,
   ta.total_paid, ta.avg_paid, ta.days_since_first_trans,
   lt.last_payment_method, lt.last_plan_days, lt.last_list_price,
@@ -127,11 +128,12 @@ SELECT
   COALESCE(lg.active_days_30d, 0) - COALESCE(lg.active_days_prev30d, 0) AS active_days_delta
 FROM labels l
 CROSS JOIN params p
-LEFT JOIN members    m  USING (msno)
-LEFT JOIN trans_agg  ta USING (msno)
-LEFT JOIN last_trans lt USING (msno)
-LEFT JOIN logs       lg USING (msno);
-
+LEFT JOIN raw.members m  USING (msno)
+JOIN      trans_agg   ta USING (msno)      -- inner join: drops users with no pre-cutoff history
+LEFT JOIN last_trans  lt USING (msno)
+LEFT JOIN logs        lg USING (msno);
 
 ALTER TABLE train_features ADD PRIMARY KEY (msno);
 ANALYZE train_features;
+
+COMMIT;
