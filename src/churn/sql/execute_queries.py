@@ -7,8 +7,15 @@ import psycopg
 from psycopg import sql
 
 DSN = os.getenv("CHURN_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox-data")
+
 SQL_DIR = Path(__file__).parent
-DATA = Path("data")
+#sql files names
+CREATE_SCHEMAS = "create_schemas.sql"
+LOAD_ROUND = "load_round.sql"
+RESET = "reset.sql"
+BUILD_FEATURES = "build_features.sql"
+
+DATA = Path("data/raw")
 CHUNK = 16 * 1024 * 1024
 
 # lookback_days must be >= the longest window used in build_features.sql (90 days).
@@ -64,6 +71,7 @@ LEFT JOIN raw.members m USING (msno)
 """
 
 
+
 def connect(*schemas, **kwargs):
     conn = psycopg.connect(DSN, autocommit=True, **kwargs)
     path = sql.SQL(", ").join(map(sql.Identifier, schemas))
@@ -91,7 +99,7 @@ def copy_csv(conn, table, cols, csv_path):
 
 def init():
     with connect("public") as c:
-        run_sql_file(c, "create_schemas.sql")
+        run_sql_file(c, CREATE_SCHEMAS)
 
 
 def load_raw():
@@ -123,7 +131,7 @@ def build_round(schema):
     # client-side binding: the build SQL has parameters and several statements
     with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
         c.execute("SET work_mem = '512MB'")
-        run_sql_file(c, "load_round.sql",
+        run_sql_file(c, LOAD_ROUND,
                      {"cutoff": config["cutoff"], "lookback_days": config["lookback_days"]})
         check_round(c, date.fromisoformat(config["cutoff"]))
 
@@ -133,14 +141,14 @@ def build_features(schema):
     config = ROUNDS[schema]
     with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
         c.execute("SET work_mem = '512MB'")
-        run_sql_file(c, "build_features.sql", {"cutoff": config["cutoff"], "win_end" : config["win_end"]})
+        run_sql_file(c, BUILD_FEATURES, {"cutoff": config["cutoff"], "win_end" : config["win_end"]})
 
 
 def reset():
     if input("Drops schemas raw, r1, r2 and all their data. Type 'yes': ") != "yes":
         return
     with connect("public") as c:
-        run_sql_file(c, "reset.sql")
+        run_sql_file(c, RESET)
 
 
 

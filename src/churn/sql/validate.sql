@@ -1,3 +1,5 @@
+-- run in psql
+
 SELECT
     COUNT(*)                                        AS n_rows,
     COUNT(DISTINCT msno)                            AS n_users,
