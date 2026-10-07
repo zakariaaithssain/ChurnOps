@@ -1,6 +1,7 @@
 import pandas as pd
 import psycopg
 import os
+import argparse
 
 from typing import Literal
 from pathlib import Path
@@ -22,10 +23,14 @@ def import_from_postgres(schema: Literal['r1', 'r2']):
 
 
 
-if __name__ == "__main__": 
-    for schema in SCHEMAS: 
-        print(f"importing from schema: {schema}")
-        filepath = import_from_postgres(schema)
-        print(f"saved to : {filepath}")
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description=f"import features table from Postgres schemas {SCHEMAS}.")
+    parser.add_argument("schema", choices=SCHEMAS, help="target schema to import.")
+    args = parser.parse_args()
+
+    print(f"importing from schema: {args.schema}")
+    filepath = import_from_postgres(args.schema)
+    print(f"saved to : {filepath}")
 
        
