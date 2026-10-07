@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS train_features;
 CREATE TABLE train_features AS
 WITH
 params AS (
-  SELECT %(cutoff)s::date AS cutoff
+  SELECT %(cutoff)s::date AS cutoff, %(win_end)s::date AS win_end
 ),
 
 -- 1) user logs: single scan over the round's userlogs (already labeled-users-only, <= cutoff)
@@ -131,7 +131,9 @@ CROSS JOIN params p
 LEFT JOIN raw.members m  USING (msno)
 JOIN      trans_agg   ta USING (msno)      -- inner join: drops users with no pre-cutoff history
 LEFT JOIN last_trans  lt USING (msno)
-LEFT JOIN logs        lg USING (msno);
+LEFT JOIN logs        lg USING (msno)
+WHERE lt.days_to_expiry BETWEEN 1 AND (p.win_end - p.cutoff);
+
 
 ALTER TABLE train_features ADD PRIMARY KEY (msno);
 ANALYZE train_features;

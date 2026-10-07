@@ -13,9 +13,18 @@ CHUNK = 16 * 1024 * 1024
 
 # lookback_days must be >= the longest window used in build_features.sql (90 days).
 ROUNDS = {
-    "r1": {"cutoff": "2017-01-31", "lookback_days": 90, "labels": "train.csv"},
-    "r2": {"cutoff": "2017-02-28", "lookback_days": 90,
-           "labels": "test/churn_comp_refresh/train_v2.csv"},
+    "r1": {
+        "cutoff": "2017-01-31",
+        "lookback_days": 90,
+        "labels": "train.csv",
+        "win_end" : "2017-02-28"
+        },
+    "r2": {
+        "cutoff": "2017-02-28",
+        "lookback_days": 90,
+        "labels": "test/churn_comp_refresh/train_v2.csv",
+        "win_end" : "2017-03-31"
+        },
 }
 
 # COPY maps columns by position: these lists must match the CSV column order.
@@ -106,27 +115,25 @@ def check_round(c, cutoff: date):
 
 
 def build_round(schema):
-    cfg = ROUNDS[schema]
+    config = ROUNDS[schema]
     with connect(schema, "raw") as c:
-        c.execute("TRUNCATE labels")        # makes a retry safe
-        n = copy_csv(c, "labels", COLS["labels"], DATA / cfg["labels"])
+        c.execute("TRUNCATE labels")        
+        n = copy_csv(c, "labels", COLS["labels"], DATA / config["labels"])
         print(f"{schema}.labels: {n:,} rows")
     # client-side binding: the build SQL has parameters and several statements
     with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
         c.execute("SET work_mem = '512MB'")
         run_sql_file(c, "load_round.sql",
-                     {"cutoff": cfg["cutoff"], "lookback_days": cfg["lookback_days"]})
-        check_round(c, date.fromisoformat(cfg["cutoff"]))
+                     {"cutoff": config["cutoff"], "lookback_days": config["lookback_days"]})
+        check_round(c, date.fromisoformat(config["cutoff"]))
 
 
 
 def build_features(schema):
-    cfg = ROUNDS[schema]
-    # client-side binding: the build SQL has parameters and several statements
+    config = ROUNDS[schema]
     with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
         c.execute("SET work_mem = '512MB'")
-        # build_features.sql only needs %(cutoff)s (90d windows are hardcoded)
-        run_sql_file(c, "build_features.sql", {"cutoff": cfg["cutoff"]})
+        run_sql_file(c, "build_features.sql", {"cutoff": config["cutoff"], "win_end" : config["win_end"]})
 
 
 def reset():
