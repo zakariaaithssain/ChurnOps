@@ -1,25 +1,22 @@
 import pandas as pd 
+
 from pathlib import Path
 from typing import Literal
+
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import QuantileTransformer, SplineTransformer, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 
+from lightgbm import LGBMClassifier
+
 FEATURES_FILE = Path("data/r1_features.parquet")
-
-
-df = pd.read_parquet(FEATURES_FILE).copy()
-
-y = df['label']
-X = df.drop(columns= ['label'])
-
-
 CATEGORICAL = ["city", "registeredvia", "gender", "last_payment_method"]
+SEED = 37
 
-
-def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:float):
+# we avoid using class_weight and is_unbalance as they will distort probabilities
+def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:float, n_knots: int):
     # for logistic regression (baseline)
     # from EDA conclusions
     ENGINEERED = ["age_is_missing", "is_plan_30", "is_city_1", "dte_is_last_day",
@@ -61,13 +58,13 @@ def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:fl
     # transformations derived from EDA
     for_numerical = Pipeline([
                         ('median_impute', SimpleImputer(strategy='median', add_indicator=True)),
-                        ('quantile_transfrom', QuantileTransformer(n_quantiles=200, output_distribution='normal'))
+                        ('quantile_transfrom', QuantileTransformer(n_quantiles=200, output_distribution='normal', random_state=SEED))
                         
     ])
     for_ushaped = Pipeline([
                         ('median_impute', SimpleImputer(strategy='median')), 
-                        ('quantile_transform', QuantileTransformer(output_distribution='uniform', n_quantiles=200)), 
-                        ('spline_transform', SplineTransformer(n_knots=6, degree=3, extrapolation='constant'))
+                        ('quantile_transform', QuantileTransformer(output_distribution='uniform', n_quantiles=200, random_state=SEED)), 
+                        ('spline_transform', SplineTransformer(n_knots=n_knots, degree=3, extrapolation='constant'))
     ])
 
     onehotencoder = lambda f : OneHotEncoder(handle_unknown='infrequent_if_exist', min_frequency=f)
@@ -82,7 +79,89 @@ def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:fl
 
     return Pipeline([
         ("preprocess", preprocess), 
-        ("model", LogisticRegression(C=C, max_iter=2000))
+        ("lr_estimator", LogisticRegression(C=C, max_iter=2000, random_state=SEED))
     ])
 
 
+
+# gradient boosting, handles missing data well (especially mnar)
+# no need for engineered features, correlated features dropping, 
+# multivariate interactions modeling, nor any transformation. 
+def create_gradient_boosting(
+                    filepath: str, 
+                    min_lumping_count : int = 1000,
+                    num_leaves : int = 31,
+                    min_child_samples: int = 20,
+                    colsample_bytree: float = 1,
+                    reg_alpha: float = 0,
+                    reg_lambda: float = 0
+                    ): 
+    df =  pd.read_parquet(Path(filepath)).copy()
+    y = df['label']
+    X = df.drop(columns=['label', 'msno'])
+    for feature in CATEGORICAL: 
+        # for lightgbm native handling
+        X[feature] = X[feature].astype("category")
+    
+    return Pipeline([
+        ("lumping", LumpingTransformer(min_count=min_lumping_count)),
+        ("lightgbm_estimator", LGBMClassifier(min_child_samples=min_child_samples, num_leaves=num_leaves,
+                                            colsample_bytree=colsample_bytree, reg_alpha=reg_alpha,
+                                            reg_lambda=reg_lambda, learning_rate=0.1, random_state=SEED))
+    ])
+
+
+
+
+from sklearn.base import TransformerMixin, BaseEstimator
+
+
+# custom Transformer for Lumping rare categories to "Other"
+# for each categ feature, group classes that occur less than min_count into "Other" 
+# "missing" are always kept even if less than min_count. 
+# this avoids overfitting on small samples and keeps MNAR signal
+
+class LumpingTransformer(TransformerMixin, BaseEstimator): 
+    def __init__(self, min_count: int = 1000):
+        self.min_count = min_count
+        self.categ_dense_classes_ = None
+
+    def fit(self, X, y = None): 
+        self.categ_dense_classes_ = {}
+        for c in CATEGORICAL:
+            vals = X[c].astype("string").fillna("MISSING")
+            counts = vals.groupby(vals).transform("count")
+            keep = sorted(set(vals[counts >= self.min_count]) | {"MISSING"})
+            self.categ_dense_classes_[c] = keep
+
+        return self
+
+    def transform(self, X): 
+        X = X.copy()
+        for categ, keep in self.categ_dense_classes_.items():
+            vals = X[categ].astype("string").fillna("MISSING")
+            vals = vals.where(vals.isin(keep), "OTHER")
+            X[categ] = pd.Categorical(vals, categories=keep + ["OTHER"])
+        return X
+
+
+# for each categ feature, group classes that occur less than min_count into "Other" 
+# "missing" are always kept even if less than min_count. 
+# this avoids overfitting on small samples and keeps MNAR signal
+# we fit on training fold, apply to train and test (like any transformation)
+# def fit_lumping(train, min_count=1000):
+#     categ_dense_classes = {}
+#     for c in CATEGORICAL:
+#         vals = train[c].astype("string").fillna("MISSING")
+#         counts = vals.groupby(vals).transform("count")
+#         keep = sorted(set(vals[counts >= min_count]) | {"MISSING"})
+#         categ_dense_classes[c] = keep
+#     return categ_dense_classes
+
+# def apply_lumping(df, categ_dense_classes):
+#     df = df.copy()
+#     for categ, keep in categ_dense_classes.items():
+#         vals = df[categ].astype("string").fillna("MISSING")
+#         vals = vals.where(vals.isin(keep), "OTHER")
+#         df[categ] = pd.Categorical(vals, categories=keep + ["OTHER"])
+#     return df
