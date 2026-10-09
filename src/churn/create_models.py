@@ -8,20 +8,19 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import QuantileTransformer, SplineTransformer, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
+from sklearn.base import TransformerMixin, BaseEstimator
 
 from lightgbm import LGBMClassifier
 
-FEATURES_FILE = Path("data/r1_features.parquet")
-CATEGORICAL = ["city", "registeredvia", "gender", "last_payment_method"]
-SEED = 37
+from config import * 
+# we avoid using class_weight (logiReg) or is_unbalance (lightgbm) as they will distort probabilities
 
-# we avoid using class_weight and is_unbalance as they will distort probabilities
+
+# logistic regression (baseline)
 def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:float, n_knots: int):
-    # for logistic regression (baseline)
     # from EDA conclusions
-    ENGINEERED = ["age_is_missing", "is_plan_30", "is_city_1", "dte_is_last_day",
+    ENGINEERED_FOR_LR = ["age_is_missing", "is_plan_30", "is_city_1", "dte_is_last_day",
                 "has_cancel", "has_no_autorenew", "has_discount", "noauto_inactive"]
-
     # too correlated with others
     CORR_DROP  = ["plays_30d","plays_90d","secs_7d","secs_90d","secs_prev30d",
                 "total_paid","last_list_price","secs_trend_30d_vs_90d"]
@@ -51,7 +50,7 @@ def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:fl
     base = df.columns.difference(CATEGORICAL)
     X[base] = X[base].astype("float64") 
 
-    flags = ENGINEERED + ["has_member_row","has_logs","last_is_autorenew","last_is_cancel"]
+    flags = ENGINEERED_FOR_LR + ["has_member_row","has_logs","last_is_autorenew","last_is_cancel"]
     NUMERICAL = [c for c in df.columns
                 if c not in CATEGORICAL + flags + CORR_DROP]
 
@@ -80,7 +79,7 @@ def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:fl
     return Pipeline([
         ("preprocess", preprocess), 
         ("lr_estimator", LogisticRegression(C=C, max_iter=2000, random_state=SEED))
-    ])
+    ]), X, y
 
 
 
@@ -108,18 +107,17 @@ def create_gradient_boosting(
         ("lightgbm_estimator", LGBMClassifier(min_child_samples=min_child_samples, num_leaves=num_leaves,
                                             colsample_bytree=colsample_bytree, reg_alpha=reg_alpha,
                                             reg_lambda=reg_lambda, learning_rate=0.1, random_state=SEED))
-    ])
+    ]), X, y 
 
 
 
 
-from sklearn.base import TransformerMixin, BaseEstimator
 
 
 # custom Transformer for Lumping rare categories to "Other"
 # for each categ feature, group classes that occur less than min_count into "Other" 
 # "missing" are always kept even if less than min_count. 
-# this avoids overfitting on small samples and keeps MNAR signal
+# this prevents lightgbm from overfitting rare classes while keeping MNAR signal ( "missing")
 
 class LumpingTransformer(TransformerMixin, BaseEstimator): 
     def __init__(self, min_count: int = 1000):
@@ -145,23 +143,3 @@ class LumpingTransformer(TransformerMixin, BaseEstimator):
         return X
 
 
-# for each categ feature, group classes that occur less than min_count into "Other" 
-# "missing" are always kept even if less than min_count. 
-# this avoids overfitting on small samples and keeps MNAR signal
-# we fit on training fold, apply to train and test (like any transformation)
-# def fit_lumping(train, min_count=1000):
-#     categ_dense_classes = {}
-#     for c in CATEGORICAL:
-#         vals = train[c].astype("string").fillna("MISSING")
-#         counts = vals.groupby(vals).transform("count")
-#         keep = sorted(set(vals[counts >= min_count]) | {"MISSING"})
-#         categ_dense_classes[c] = keep
-#     return categ_dense_classes
-
-# def apply_lumping(df, categ_dense_classes):
-#     df = df.copy()
-#     for categ, keep in categ_dense_classes.items():
-#         vals = df[categ].astype("string").fillna("MISSING")
-#         vals = vals.where(vals.isin(keep), "OTHER")
-#         df[categ] = pd.Categorical(vals, categories=keep + ["OTHER"])
-#     return df
