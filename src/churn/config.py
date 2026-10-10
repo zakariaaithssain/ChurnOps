@@ -6,3 +6,4 @@ CATEGORICAL = ["city", "registeredvia", "gender", "last_payment_method"]
 SEED = 37
 R1_WIN_LEN = 28
 R2_WIN_LEN = 30
+N_OPTUNA_TRIALS = 100

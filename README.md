@@ -14,8 +14,7 @@ Every feature below is computed from data on or before the cutoff (r1: 2017-01-3
 | `city` | Anonymous city code. | Categorical. NULL when there is no member row. |
 | `registeredvia` | Registration channel code. | Categorical. |
 | `gender` | Male, female or NULL. | Heavily missing, so the missingness is itself a signal. |
-| `age` | Age from `bd`, kept only if it is between 10 and 90. | The raw `bd` column has outliers from -7000 to 2015. |
-| `days_since_registration` | Cutoff minus registration date. | NULL if registered after the cutoff or no member row. |
+| `age` | Age from `bd`, kept only if it is between 10 and 90. |  date. | NULL if registered after the cutoff or no member row. |
 | `has_member_row` | Whether a member row exists. | Lets the model use missing demographics as a signal. |
 
 **Transaction history** (all transactions up to the cutoff)
@@ -39,8 +38,7 @@ Every feature below is computed from data on or before the cutoff (r1: 2017-01-3
 |---|---|
 | `last_payment_method` | Payment method code, categorical. |
 | `last_plan_days` | Plan length in days (7, 30, 90, 365 and so on). |
-| `last_list_price` / `last_amount_paid` | Plan list price and amount actually paid. The gap between them is the discount. |
-| `last_is_autorenew` | Whether auto-renew was on. This is one of the strongest churn signals. |
+| `last_list_price` / `last_amount_paid` | Plan list price and amount actually paid.  is one of the strongest churn signals. |
 | `last_is_cancel` | Whether the last transaction was a cancellation. Also very strong. |
 | `days_to_expiry` | Expiry date minus cutoff. After your filter it is the position inside the label month (1-28 for r1, 1-31 for r2). |
 
@@ -67,9 +65,47 @@ Windows: 7d, 30d and 90d are nested, since 90d contains 30d, which contains 7d. 
 | Feature | Meaning |
 |---|---|
 | `secs_trend_7d_vs_30d` | Average daily seconds in the last 7 days divided by the last 30 days. Below 1 means recent decline. |
-| `secs_trend_30d_vs_90d` | The same idea for 30d versus 90d. The baseline contains the numerator, so it is the weakest of the three. |
-| `secs_trend_30d_vs_prev30d` | Last 30 days of seconds divided by the previous 30. This is the cleanest decline signal. |
+| `secs_trend_30d_vs_90d` |  Last 30 days of seconds divided by the previous 30. This is the cleanest decline signal. |
 | `active_days_delta` | Active days in the last 30 minus the previous 30. |
 
 
 
+
+## decisions:
+
+---
+
+- **models:**
+  we use two models here: `LightGBM` from our inductive bias about this task, as it's known to perform well on large datasets, handles categorical variables well with no encoding, highly optimized, and natively learns the multivariate relationships with the target and also the underlying information behind MNAR missing values, which would be lost with imputation.
+
+  `Logistic Regression` is used as a baseline to justify the usage of `LightGBM`, this latter should outperform it strongly, otherwise, the task in hand would be considered simple enough that using a complex model would be just an overkill.
+
+---  
+
+---  
+
+- **metrics:**  
+    we use `Log Loss` (cross-entropy) as the tuning metric and primary comparison metric, as it penalizes distorted probabilities heavily, so it optimizes for calibrated models.  
+
+    we also use `Average Precision` (AUC of Precision-Recall curve, averaged over thresholds) as the diagnostic for imbalance.  
+
+---
+
+---
+
+- **class imbalance handling:**
+    we avoided using models hyperparams that would handle this (class_weight for LogisticRegression and is_unbalance for LightGBM) as they multiply the minority loss by ~17x, so the models act as if the prior is 50/50, thus distorting the probabilities and breaks calibration.  
+
+    this is a safe choice because we have enough minority samples to learn the patterns (~50k minority samples), combined with the usage of stratisfied cross validation folds.
+
+---
+
+- **evaluation on out-of-fold:**
+    we first fit the best pipeline per model on all data and save it, to finally test it on the Round2 data. we then run `cross_val_predict` with `StratifiedKFold`, which clones the pipeline and trains 5 fresh copies on 4/5ths each, predicting the held-out 1/5th. 
+
+    the 5 held-out prediction pieces are concatenated into one vector per user and scored once. this pooled score differs from averaging the calculated scores per fold: pooled builds a single PR curve over all ~49k positives (more stable at 5.6% churn), while mean-of-folds averages 5 noisy curves.
+
+    concatenation is valid here because all folds share hyperparams, base rate (~5.6% via stratification), and calibration (no reweighting), and because the used metrics allow it.  
+    the pooled artifact is needed for threshold/top-k tuning, calibration checks, and LR+GBM stacking, a single mean number cannot do that.
+
+---

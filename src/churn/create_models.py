@@ -12,10 +12,7 @@ from sklearn.base import TransformerMixin, BaseEstimator
 
 from lightgbm import LGBMClassifier
 
-try:
-    from churn.config import CATEGORICAL, SEED
-except ImportError:  # running as script inside src/churn/
-    from config import CATEGORICAL, SEED
+from churn.config import CATEGORICAL, SEED
 
 
 # we avoid using class_weight (logiReg) or is_unbalance (lightgbm) as they will distort probabilities
@@ -120,12 +117,12 @@ class MyLightGBM:
 
     def create_pipeline(
         self,
-        num_leaves,
-        min_child_samples,
-        colsample_bytree,
-        reg_alpha,
-        reg_lambda,
-        min_lumping_count
+        num_leaves: int = 31,
+        min_child_samples: int = 20,
+        colsample_bytree: float = 1.0,
+        reg_alpha: float = 0.0,
+        reg_lambda: float = 0.0,
+        min_lumping_count: int = 1000,
     ):
         return Pipeline([
             ("lumping", LumpingTransformer(min_count=min_lumping_count)),
@@ -138,6 +135,7 @@ class MyLightGBM:
                 learning_rate=0.1, #no need to tune
                 random_state=SEED,
                 verbose=-1,
+                n_jobs=-1,
             )),
         ])
         
@@ -173,92 +171,11 @@ class LumpingTransformer(TransformerMixin, BaseEstimator):
         return X
 
 
-# def create_logistic_regression(filepath : str, window_len: Literal[28, 30], C:float, n_knots: int):
-#     # from EDA conclusions
-#     ENGINEERED_FOR_LR = ["age_is_missing", "is_plan_30", "is_city_1", "dte_is_last_day",
-#                 "has_cancel", "has_no_autorenew", "has_discount", "noauto_inactive"]
-#     # too correlated with others
-#     CORR_DROP  = ["plays_30d","plays_90d","secs_7d","secs_90d","secs_prev30d",
-#                 "total_paid","last_list_price","secs_trend_30d_vs_90d"]
-#     # U-shaped corr with label (both decline AND growth predict churn)
-#     # linear term cannot represent a U, so each gets a spline expansion BESIDE its raw column.
-#     U_SHAPED = ["secs_trend_30d_vs_prev30d", "active_days_delta"]
-
-
-#     df =  pd.read_parquet(Path(filepath)).copy()
-#     y = df['label']
-#     X = df.drop(columns=['label', 'msno'])
-
-#     # add engineered features: 
-#     X['age_is_missing'] = X['age'].isna().astype(float)
-#     X['is_plan_30'] = (X['last_plan_days'] == 30).astype(float)
-#     X['is_city_1'] = (pd.to_numeric(X['city'], errors='coerce') == 1).astype(float)
-#     X['dte_is_last_day'] = (X['days_to_expiry'] == window_len).astype(float)
-#     X['has_cancel'] = (X['n_cancel'] > 0).astype(float)
-#     X['has_no_autorenew'] = (X['n_no_autorenew'] > 0).astype(float)
-#     X['has_discount'] = (X['n_discounted'] > 0).astype(float)
-#     X['noauto_inactive'] = ((X["last_is_autorenew"] == 0) & (X["active_days_30d"] == 0)).astype(float)
-
-#     # encode missingness
-#     for cat in CATEGORICAL: 
-#         X[cat] = X[cat].astype('string').fillna("MISSING")
-
-#     base = df.columns.difference(CATEGORICAL)
-#     X[base] = X[base].astype("float64") 
-
-#     flags = ENGINEERED_FOR_LR + ["has_member_row","has_logs","last_is_autorenew","last_is_cancel"]
-#     NUMERICAL = [c for c in df.columns
-#                 if c not in CATEGORICAL + flags + CORR_DROP]
-
-#     # transformations derived from EDA
-#     for_numerical = Pipeline([
-#                         ('median_impute', SimpleImputer(strategy='median', add_indicator=True)),
-#                         ('quantile_transfrom', QuantileTransformer(n_quantiles=200, output_distribution='normal', random_state=SEED))
-                        
-#     ])
-#     for_ushaped = Pipeline([
-#                         ('median_impute', SimpleImputer(strategy='median')), 
-#                         ('quantile_transform', QuantileTransformer(output_distribution='uniform', n_quantiles=200, random_state=SEED)), 
-#                         ('spline_transform', SplineTransformer(n_knots=n_knots, degree=3, extrapolation='constant'))
-#     ])
-
-#     onehotencoder = lambda f : OneHotEncoder(handle_unknown='infrequent_if_exist', min_frequency=f)
-
-#     preprocess = ColumnTransformer([
-#         ("numerical", for_numerical, NUMERICAL),
-#         ("u_shaped", for_ushaped, U_SHAPED), 
-#         ("flags", "passthrough", flags), 
-#         ("categorical_1", onehotencoder(0.01), ["city", "registeredvia", "gender"]), 
-#         ("categorical_2", onehotencoder(1000), ["last_payment_method"])
-#     ])
-
-#     return Pipeline([
-#         ("preprocess", preprocess), 
-#         ("lr_estimator", LogisticRegression(C=C, max_iter=2000, random_state=SEED))
-#     ]), X, y
 
 
 
 
-# def create_lightgbm(
-#                     filepath: str, 
-#                     min_lumping_count : int = 1000,
-#                     num_leaves : int = 31,
-#                     min_child_samples: int = 20,
-#                     colsample_bytree: float = 1,
-#                     reg_alpha: float = 0,
-#                     reg_lambda: float = 0
-#                     ): 
-#     df =  pd.read_parquet(Path(filepath)).copy()
-#     y = df['label']
-#     X = df.drop(columns=['label', 'msno'])
-#     
-#     return Pipeline([
-#         ("lumping", LumpingTransformer(min_count=min_lumping_count)),
-#         ("lightgbm_estimator", LGBMClassifier(min_child_samples=min_child_samples, num_leaves=num_leaves,
-#                                             colsample_bytree=colsample_bytree, reg_alpha=reg_alpha,
-#                                             reg_lambda=reg_lambda, learning_rate=0.1, random_state=SEED))
-#     ]), X, y 
+
 
 
 
