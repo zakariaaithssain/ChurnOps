@@ -17,7 +17,7 @@ from churn.studies import run_lightgbm_study, run_logireg_study
 def main(argv=None):
     ap = argparse.ArgumentParser(description="hyperparam tune + refit Logistic Regression and LightGBM on KKBOX r1 data")
     ap.add_argument("--data-file", default=str(FEATURES_FILE))
-    ap.add_argument("--out", default=str(ROOT / "artifacts"))
+    ap.add_argument("--save-path", default=str(ROOT / "artifacts"))
     ap.add_argument("--n-trials", type=int, default=N_OPTUNA_TRIALS)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--seed", type=int, default=SEED)
@@ -25,18 +25,19 @@ def main(argv=None):
     ap.add_argument("--skip-lgbm", action="store_true")
     args = ap.parse_args(argv)
 
-    out = Path(args.out)
+    out = Path(args.save_path)
     out.mkdir(parents=True, exist_ok=True)
 
     kfolds = StratifiedKFold(n_splits=args.folds, shuffle=True, random_state=args.seed)
-    data_path = Path(args.data)
-    summary: dict = {"folds": args.folds, "N_OPTUNA_TRIALS": args.N_OPTUNA_TRIALS, "seed": args.seed}
+    data_path = Path(args.data_file)
+    summary: dict = {"folds": args.folds, "n_trials": args.n_trials, "seed": args.seed}
 
+    write_summary = False
     if not args.skip_logreg:
         builder = MyLogisticRegression(filepath=data_path, window_len=R1_WIN_LEN)
         X, y = builder.create_X_y()
 
-        logireg_study = run_logireg_study(builder, X, y, kfolds, args.N_OPTUNA_TRIALS)
+        logireg_study = run_logireg_study(builder, X, y, kfolds, args.n_trials)
         logireg_best_hyperp = dict(logireg_study.best_params)
         print(f"Logistic Regression best {logireg_best_hyperp} neg_log_loss={logireg_study.best_value:.4f}")
 
@@ -49,12 +50,13 @@ def main(argv=None):
         (out / "logireg_best.json").write_text(json.dumps(
             {"params": logireg_best_hyperp, "best_neg_log_loss": logireg_study.best_value, "out_of_fold_probas": logireg_scores}, indent=2))
         summary["logireg"] = {"params": logireg_best_hyperp, **logireg_scores}
+        write_summary = True
 
     if not args.skip_lgbm:
         builder = MyLightGBM(filepath=data_path)
         X, y = builder.create_X_y()
 
-        lgbm_study = run_lightgbm_study(builder, X, y, kfolds, args.N_OPTUNA_TRIALS)
+        lgbm_study = run_lightgbm_study(builder, X, y, kfolds, args.n_trials)
         lgbm_best_hyperp = dict(lgbm_study.best_params)
         print(f"LightGBM best {lgbm_best_hyperp} neg_log_loss={lgbm_study.best_value:.4f}")
 
@@ -69,10 +71,12 @@ def main(argv=None):
         (out / "lgbm_best.json").write_text(json.dumps(
             {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, "out_of_fold_probas": lgbm_scores}, indent=2))
         summary["lgbm"] = {"params": lgbm_best_hyperp, **lgbm_scores}
+        write_summary = True
 
 
-    (out / "summary.json").write_text(json.dumps(summary, indent=2))
-    print("wrote summary", out)
+    if write_summary: 
+        (out / "summary.json").write_text(json.dumps(summary, indent=2))
+        print("wrote summary", out)
 
 
 if __name__ == "__main__":

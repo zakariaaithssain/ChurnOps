@@ -2,10 +2,10 @@ import optuna
 from optuna import Trial
 from sklearn.model_selection import cross_val_score
 
-from config import N_OPTUNA_TRIALS
+from churn.config import N_OPTUNA_TRIALS
 
 
-def run_logireg_study(builder, X, y, kfolds, N_OPTUNA_TRIALS=N_OPTUNA_TRIALS):
+def run_logireg_study(builder, X, y, kfolds, n_trials=N_OPTUNA_TRIALS):
     def _lireg_objective(trial: Trial):
         C = trial.suggest_float('C', 1e-3, 1, log=True)
         spline_n_knots = trial.suggest_int('n_knots', 4, 8)
@@ -14,11 +14,11 @@ def run_logireg_study(builder, X, y, kfolds, N_OPTUNA_TRIALS=N_OPTUNA_TRIALS):
         return cross_val_score(estimator, X, y, cv=kfolds, scoring="neg_log_loss").mean()
 
     study = optuna.create_study(direction="maximize")
-    study.optimize(_lireg_objective, N_OPTUNA_TRIALS=N_OPTUNA_TRIALS, n_jobs=-1)
+    study.optimize(_lireg_objective, n_trials=n_trials, n_jobs=-1)
     return study
 
 
-def run_lightgbm_study(builder, X, y, kfolds, N_OPTUNA_TRIALS=N_OPTUNA_TRIALS):
+def run_lightgbm_study(builder, X, y, kfolds, n_trials=N_OPTUNA_TRIALS):
     def _lightgbm_objective(trial: Trial):
         num_leaves = trial.suggest_int("num_leaves", 15, 127)
         min_child_samples = trial.suggest_int("min_child_samples", 50, 500)
@@ -35,7 +35,7 @@ def run_lightgbm_study(builder, X, y, kfolds, N_OPTUNA_TRIALS=N_OPTUNA_TRIALS):
         return cross_val_score(estimator, X, y, cv=kfolds, scoring="neg_log_loss").mean()
 
     study = optuna.create_study(direction="maximize")
-    study.optimize(_lightgbm_objective, n_trials=N_OPTUNA_TRIALS, n_jobs=-1)
+    study.optimize(_lightgbm_objective, n_trials=n_trials, n_jobs=-1)
     return study
 
 
