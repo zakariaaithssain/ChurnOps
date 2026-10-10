@@ -13,7 +13,7 @@ def run_logireg_study(builder, X, y, kfolds, n_trials=N_OPTUNA_TRIALS):
         estimator = builder.create_pipeline(C=C, n_knots=spline_n_knots)
         return cross_val_score(estimator, X, y, cv=kfolds, scoring="neg_log_loss").mean()
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(direction="maximize", study_name="logireg_study")
     study.optimize(_lireg_objective, n_trials=n_trials, n_jobs=-1)
     return study
 
@@ -34,7 +34,7 @@ def run_lightgbm_study(builder, X, y, kfolds, n_trials=N_OPTUNA_TRIALS):
             reg_lambda=reg_lambda)
         return cross_val_score(estimator, X, y, cv=kfolds, scoring="neg_log_loss").mean()
 
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(direction="maximize", study_name="lgbm_study")
     study.optimize(_lightgbm_objective, n_trials=n_trials, n_jobs=-1)
     return study
 

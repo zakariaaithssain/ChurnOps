@@ -9,9 +9,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from sklearn.model_selection import StratifiedKFold
 
 from churn.config import FEATURES_FILE, R1_WIN_LEN, SEED, N_OPTUNA_TRIALS
-from churn.create_models import MyLightGBM, MyLogisticRegression
+from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
 from churn.evaluate import calculate_save_oof_metrics, refit_save_best_pipeline
-from churn.studies import run_lightgbm_study, run_logireg_study
+from churn.create_studies import run_lightgbm_study, run_logireg_study
 
 
 def main(argv=None):
@@ -34,7 +34,7 @@ def main(argv=None):
 
     write_summary = False
     if not args.skip_logreg:
-        builder = MyLogisticRegression(filepath=data_path, window_len=R1_WIN_LEN)
+        builder = LogisticRegressionPipeline(filepath=data_path, window_len=R1_WIN_LEN)
         X, y = builder.create_X_y()
 
         logireg_study = run_logireg_study(builder, X, y, kfolds, args.n_trials)
@@ -53,7 +53,7 @@ def main(argv=None):
         write_summary = True
 
     if not args.skip_lgbm:
-        builder = MyLightGBM(filepath=data_path)
+        builder = LightGBMPipeline(filepath=data_path)
         X, y = builder.create_X_y()
 
         lgbm_study = run_lightgbm_study(builder, X, y, kfolds, args.n_trials)

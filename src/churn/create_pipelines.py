@@ -18,7 +18,7 @@ from churn.config import CATEGORICAL, SEED
 # we avoid using class_weight (logiReg) or is_unbalance (lightgbm) as they will distort probabilities
 
 
-class MyLogisticRegression: 
+class LogisticRegressionPipeline: 
     def __init__(self, filepath : str, window_len : Literal[28, 30]): 
         self.filepath = filepath
         self.window_len = window_len
@@ -44,7 +44,11 @@ class MyLogisticRegression:
 
 
 
-    def create_pipeline(self, C : float, n_knots : int): 
+    def create_pipeline(
+        self,
+        C : float,
+        n_knots : int
+    ): 
         # transformations derived from EDA
         for_numerical = Pipeline([
                             ('median_impute', SimpleImputer(strategy='median', add_indicator=True)),
@@ -100,7 +104,7 @@ class MyLogisticRegression:
         
 
 
-class MyLightGBM:
+class LightGBMPipeline:
     # gradient boosting handles missing data well (especially MNAR):
     # no engineered features, no correlated-feature dropping,
     # no multivariate interaction modeling, nor any transformation.
