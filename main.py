@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from sklearn.model_selection import StratifiedKFold
 
-from churn.config import FEATURES_FILE, R1_WIN_LEN, SEED, N_OPTUNA_TRIALS
+from churn.config import FEATURES_FILE, R1_WIN_LEN, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
 from churn.evaluate import calculate_save_oof_metrics, refit_save_best_pipeline
 from churn.create_studies import run_lightgbm_study, run_logireg_study
@@ -18,7 +18,6 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="hyperparam tune + refit Logistic Regression and LightGBM on KKBOX r1 data")
     ap.add_argument("--data-file", default=str(FEATURES_FILE))
     ap.add_argument("--save-path", default=str(ROOT / "artifacts"))
-    ap.add_argument("--n-trials", type=int, default=N_OPTUNA_TRIALS)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--skip-logreg", action="store_true")
@@ -30,14 +29,15 @@ def main(argv=None):
 
     kfolds = StratifiedKFold(n_splits=args.folds, shuffle=True, random_state=args.seed)
     data_path = Path(args.data_file)
-    summary: dict = {"folds": args.folds, "n_trials": args.n_trials, "seed": args.seed}
+    summary: dict = {"folds": args.folds, "n_trials": {"logireg" : LR_OPTUNA_TRIALS, "lgbm" : LGBM_OPTUNA_TRIALS}, "seed": args.seed}
 
     write_summary = False
+    
     if not args.skip_logreg:
         builder = LogisticRegressionPipeline(filepath=data_path, window_len=R1_WIN_LEN)
         X, y = builder.create_X_y()
 
-        logireg_study = run_logireg_study(builder, X, y, kfolds, args.n_trials)
+        logireg_study = run_logireg_study(builder, X, y, kfolds, LR_OPTUNA_TRIALS)
         logireg_best_hyperp = dict(logireg_study.best_params)
         print(f"Logistic Regression best {logireg_best_hyperp} neg_log_loss={logireg_study.best_value:.4f}")
 
@@ -56,7 +56,7 @@ def main(argv=None):
         builder = LightGBMPipeline(filepath=data_path)
         X, y = builder.create_X_y()
 
-        lgbm_study = run_lightgbm_study(builder, X, y, kfolds, args.n_trials)
+        lgbm_study = run_lightgbm_study(builder, X, y, kfolds, LGBM_OPTUNA_TRIALS)
         lgbm_best_hyperp = dict(lgbm_study.best_params)
         print(f"LightGBM best {lgbm_best_hyperp} neg_log_loss={lgbm_study.best_value:.4f}")
 
@@ -72,7 +72,6 @@ def main(argv=None):
             {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, "out_of_fold_probas": lgbm_scores}, indent=2))
         summary["lgbm"] = {"params": lgbm_best_hyperp, **lgbm_scores}
         write_summary = True
-
 
     if write_summary: 
         (out / "summary.json").write_text(json.dumps(summary, indent=2))

@@ -139,7 +139,7 @@ class LightGBMPipeline:
                 learning_rate=0.1, #no need to tune
                 random_state=SEED,
                 verbose=-1,
-                n_jobs=-1,
+                n_jobs=8, # for lightgbm, set parallelism in model level, not cv nor trials level. 
             )),
         ])
         

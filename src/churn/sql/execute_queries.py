@@ -1,12 +1,13 @@
 import argparse
-import os
+import psycopg
+
 from datetime import date
 from pathlib import Path
-
-import psycopg
 from psycopg import sql
 
-DSN = os.getenv("CHURN_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox_data")
+from churn.config import DATA_DSN
+
+
 
 SQL_DIR = Path(__file__).parent
 #sql files names
@@ -73,7 +74,7 @@ LEFT JOIN raw.members m USING (msno)
 
 
 def connect(*schemas, **kwargs):
-    conn = psycopg.connect(DSN, autocommit=True, **kwargs)
+    conn = psycopg.connect(DATA_DSN, autocommit=True, **kwargs)
     path = sql.SQL(", ").join(map(sql.Identifier, schemas))
     # switch to schema
     conn.execute(sql.SQL("SET search_path TO {}").format(path))
