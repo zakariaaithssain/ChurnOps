@@ -6,7 +6,7 @@ from pathlib import Path
 import psycopg
 from psycopg import sql
 
-DSN = os.getenv("CHURN_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox-data")
+DSN = os.getenv("CHURN_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox_data")
 
 SQL_DIR = Path(__file__).parent
 #sql files names

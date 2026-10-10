@@ -9,7 +9,7 @@ from pathlib import Path
 #TODO: remove hardcoded schema names across files to some config file for all project scope 
 
 Path("data").mkdir(exist_ok=True)
-DSN = os.getenv("CHURN_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox-data")
+DSN = os.getenv("CHURN_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox_data")
 SCHEMAS = ['r1', 'r2']
 
 
