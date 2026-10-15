@@ -10,7 +10,7 @@ from sklearn.model_selection import StratifiedKFold
 
 from churn.config import FEATURES_FILE, R1_WIN_LEN, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
-from churn.evaluate import calculate_save_oof_metrics, refit_save_best_pipeline
+from churn.evaluate import calculate_oof_metrics, refit_save_best_pipeline
 from churn.create_studies import run_lightgbm_study, run_logireg_study
 
 
@@ -29,7 +29,11 @@ def main(argv=None):
 
     kfolds = StratifiedKFold(n_splits=args.folds, shuffle=True, random_state=args.seed)
     data_path = Path(args.data_file)
-    summary: dict = {"folds": args.folds, "n_trials": {"logireg" : LR_OPTUNA_TRIALS, "lgbm" : LGBM_OPTUNA_TRIALS}, "seed": args.seed}
+    # NOTE: studies use load_if_exists=True, so optimize(n_trials=N) appends N
+    # trials to whatever is already stored. Report actual cumulative totals,
+    # not the per-run request, otherwise the summary understates the budget
+    # after more than one invocation.
+    summary: dict = {"folds": args.folds, "n_trials": {}, "seed": args.seed}
 
     write_summary = False
     
@@ -44,12 +48,11 @@ def main(argv=None):
         logireg_best_pipe = builder.create_pipeline(**logireg_best_hyperp)
         refit_save_best_pipeline(logireg_best_pipe, X, y, out, "logireg")
         
-        logireg_scores = calculate_save_oof_metrics(builder, logireg_best_pipe, X, y, kfolds, out, "logireg")
+        logireg_scores = calculate_oof_metrics(logireg_best_pipe, X, y, kfolds)
         print(f"Logistic Regression out-of-fold probas: {logireg_scores}")
 
-        (out / "logireg_best.json").write_text(json.dumps(
-            {"params": logireg_best_hyperp, "best_neg_log_loss": logireg_study.best_value, "out_of_fold_probas": logireg_scores}, indent=2))
-        summary["logireg"] = {"params": logireg_best_hyperp, **logireg_scores}
+        summary["logireg"] = {"params": logireg_best_hyperp, "best_neg_log_loss": logireg_study.best_value, **logireg_scores}
+        summary["n_trials"]["logireg"] = len(logireg_study.trials)
         write_summary = True
 
     if not args.skip_lgbm:
@@ -63,14 +66,11 @@ def main(argv=None):
         lgbm_best_pipe = builder.create_pipeline(**lgbm_best_hyperp)
         refit_save_best_pipeline(lgbm_best_pipe, X, y, out, "lgbm")
 
-        lgbm_scores = calculate_save_oof_metrics(builder, lgbm_best_pipe, X, y, kfolds, out, "lgbm")
+        lgbm_scores = calculate_oof_metrics(lgbm_best_pipe, X, y, kfolds)
         print(f"LightGBM out-of-fold probas: {lgbm_scores}")
 
-        lumping_levels = lgbm_best_pipe.named_steps["lumping"].categ_dense_classes_
-        (out / "lgbm_lumping_levels.json").write_text(json.dumps(lumping_levels, indent=2))
-        (out / "lgbm_best.json").write_text(json.dumps(
-            {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, "out_of_fold_probas": lgbm_scores}, indent=2))
-        summary["lgbm"] = {"params": lgbm_best_hyperp, **lgbm_scores}
+        summary["lgbm"] = {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, **lgbm_scores}
+        summary["n_trials"]["lgbm"] = len(lgbm_study.trials)
         write_summary = True
 
     if write_summary: 

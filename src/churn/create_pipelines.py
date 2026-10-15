@@ -12,7 +12,7 @@ from sklearn.base import TransformerMixin, BaseEstimator
 
 from lightgbm import LGBMClassifier
 
-from churn.config import CATEGORICAL, SEED
+from churn.config import CATEGORICAL, SEED, N_JOBS
 
 
 # we avoid using class_weight (logiReg) or is_unbalance (lightgbm) as they will distort probabilities
@@ -139,7 +139,7 @@ class LightGBMPipeline:
                 learning_rate=0.1, #no need to tune
                 random_state=SEED,
                 verbose=-1,
-                n_jobs=8, # for lightgbm, set parallelism in model level, not cv nor trials level. 
+                n_jobs = N_JOBS, # for lightgbm, set parallelism in model level, not cv nor trials level. 
             )),
         ])
         

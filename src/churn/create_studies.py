@@ -3,7 +3,7 @@ from optuna import Trial
 from sklearn.base import clone
 from sklearn.metrics import log_loss
 
-from churn.config import LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS, OPTUNA_DSN
+from churn.config import LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS, OPTUNA_DSN, N_JOBS
 
 PRUNER = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1)
 
@@ -42,7 +42,7 @@ def run_logireg_study(builder, X, y, kfolds, n_trials=LR_OPTUNA_TRIALS):
         storage=OPTUNA_DSN,
         load_if_exists=True)
 
-    study.optimize(_lireg_objective, n_trials=n_trials, n_jobs=8) #parallelize only for logireg, because it has none built in. 
+    study.optimize(_lireg_objective, n_trials=n_trials, n_jobs = N_JOBS) #parallelize only for logireg, because it has none built in. 
     return study
 
 

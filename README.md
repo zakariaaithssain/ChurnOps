@@ -109,3 +109,23 @@ Windows: 7d, 30d and 90d are nested, since 90d contains 30d, which contains 7d. 
     the pooled artifact is needed for threshold/top-k tuning, calibration checks, and LR+GBM stacking, a single mean number cannot do that.
 
 ---
+
+## results:
+
+Pooled out-of-fold on `r1`, 5-fold stratified (`seed=37`), from `artifacts/summary.json`:
+
+| model | logloss (lower better) | PR-AUC (higher better) | best params | trials |
+|---|---|---|---|---|
+| `Logistic Regression` | 0.1517 | 0.4239 | `C=0.721, n_knots=6` | 40 |
+| `LightGBM` | 0.1428 | 0.4671 | `num_leaves=47, min_child_samples=202, colsample_bytree=0.905, reg_alpha=0.0031, reg_lambda=0.572` | 200 |
+
+Random PR-AUC = prevalence `~0.056`, so both are ~7.5-8.3x random.
+
+- **logloss delta: -0.0089 absolute, -5.9% relative.** Calibrated-probability win (no `class_weight` / `is_unbalance` used).
+- **PR-AUC delta: +0.043 absolute, +10.2% relative.** Ranking win under imbalance: more churners recalled at the same precision.
+
+**Is `LightGBM` worth it? Yes.** The LR baseline is already strong (manual flags, corr-drop, median+indicator+`QuantileTransformer`, splines for U-shaped trends, lumped one-hot in `src/churn/create_pipelines.py`), while LightGBM uses raw features + rare-category lumping only. Beating it by 6%/10% with less feature-engineering confirms non-linear interactions and native MNAR/categorical handling matter here, so the complexity is justified over the linear baseline.
+
+Caveat: these are pooled point estimates with no per-fold std. Confirm on `r2` with the refit `*_pipeline.joblib` before final claim.
+
+---

@@ -11,3 +11,4 @@ LGBM_OPTUNA_TRIALS = 100
 DATA_DSN = os.getenv("CHURN_DATA_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox_data")
 OPTUNA_DSN = os.getenv("OPTUNA_DSN", "postgresql://kkbox:postgrespass@localhost:5432/optuna_studies")
 SCHEMAS = ['r1', 'r2']
+N_JOBS = 8 # I have 8 physical cores
