@@ -1,20 +1,21 @@
 import pandas as pd
 import psycopg
-import os
 import argparse
 
 from typing import Literal
-from pathlib import Path
+from psycopg import sql
 
-from churn.config import DATA_DSN, SCHEMAS
+from churn.config import DATA_DSN, SCHEMAS, FEATURES
 
 
 
 def import_from_postgres(schema: Literal['r1', 'r2']):
+    save_path = FEATURES[schema]
     with psycopg.connect(DATA_DSN) as conn:
-        cursor = conn.execute(f"SELECT * FROM {schema}.train_features")
+        q = sql.SQL("SELECT * FROM {}.train_features").format(sql.Identifier(schema))
+        cursor = conn.execute(q)
         cols = [d.name for d in cursor.description]
-        save_path = Path(f"data/{schema}_features.parquet")
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(cursor.fetchall(), columns=cols).to_parquet(save_path)
         return save_path
 
@@ -29,5 +30,3 @@ if __name__ == "__main__":
     print(f"importing from schema: {args.schema}")
     filepath = import_from_postgres(args.schema)
     print(f"saved to : {filepath}")
-
-       

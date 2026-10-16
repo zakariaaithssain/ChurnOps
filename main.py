@@ -1,23 +1,20 @@
 import argparse
 import json
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT / "src"))
 
 from sklearn.model_selection import StratifiedKFold
 
-from churn.config import FEATURES_FILE, R1_WIN_LEN, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
+from churn.config import ARTIFACTS_DIR, FEATURES, ROUNDS, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
-from churn.evaluate import calculate_oof_metrics, refit_save_best_pipeline
+from churn.metrics import calculate_oof_metrics, refit_save_best_pipeline
 from churn.create_studies import run_lightgbm_study, run_logireg_study
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="hyperparam tune + refit Logistic Regression and LightGBM on KKBOX r1 data")
-    ap.add_argument("--data-file", default=str(FEATURES_FILE))
-    ap.add_argument("--save-path", default=str(ROOT / "artifacts"))
+    ap = argparse.ArgumentParser(description="hyperparam tune + refit Logistic Regression and LightGBM on KKBOX round data (r1=train, r2=test)")
+    ap.add_argument("--schema", choices=list(ROUNDS), default="r1", help="round to train on (features/ win_len come from config.ROUNDS)")
+    ap.add_argument("--data-file", default=None, help="override parquet path (default: config.FEATURES[schema])")
+    ap.add_argument("--save-path", default=str(ARTIFACTS_DIR))
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--skip-logreg", action="store_true")
@@ -28,17 +25,18 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
 
     kfolds = StratifiedKFold(n_splits=args.folds, shuffle=True, random_state=args.seed)
-    data_path = Path(args.data_file)
+    data_path = Path(args.data_file) if args.data_file else FEATURES[args.schema]
+    window_len = ROUNDS[args.schema]["win_len"]
     # NOTE: studies use load_if_exists=True, so optimize(n_trials=N) appends N
     # trials to whatever is already stored. Report actual cumulative totals,
     # not the per-run request, otherwise the summary understates the budget
     # after more than one invocation.
-    summary: dict = {"folds": args.folds, "n_trials": {}, "seed": args.seed}
+    summary: dict = {"schema": args.schema, "data_file": str(data_path), "folds": args.folds, "n_trials": {}, "seed": args.seed}
 
     write_summary = False
-    
+
     if not args.skip_logreg:
-        builder = LogisticRegressionPipeline(filepath=data_path, window_len=R1_WIN_LEN)
+        builder = LogisticRegressionPipeline(filepath=data_path, window_len=window_len)
         X, y = builder.create_X_y()
 
         logireg_study = run_logireg_study(builder, X, y, kfolds, LR_OPTUNA_TRIALS)
@@ -47,7 +45,7 @@ def main(argv=None):
 
         logireg_best_pipe = builder.create_pipeline(**logireg_best_hyperp)
         refit_save_best_pipeline(logireg_best_pipe, X, y, out, "logireg")
-        
+
         logireg_scores = calculate_oof_metrics(logireg_best_pipe, X, y, kfolds)
         print(f"Logistic Regression out-of-fold probas: {logireg_scores}")
 
@@ -73,7 +71,7 @@ def main(argv=None):
         summary["n_trials"]["lgbm"] = len(lgbm_study.trials)
         write_summary = True
 
-    if write_summary: 
+    if write_summary:
         (out / "summary.json").write_text(json.dumps(summary, indent=2))
         print("wrote summary", out)
 

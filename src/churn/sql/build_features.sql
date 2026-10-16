@@ -1,3 +1,8 @@
+-- Build train_features for one round. Run with search_path set to (round, raw).
+-- Params %(cutoff)s / %(win_end)s come from config.ROUNDS.
+-- Only train_features may be dropped/rebuilt; raw and round source tables
+-- are never dropped here (fail fast instead). Log windows look back 90 days,
+-- so config lookback_days must stay >= 90.
 BEGIN;
 
 DROP TABLE IF EXISTS train_features;

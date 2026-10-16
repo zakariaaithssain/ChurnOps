@@ -1,4 +1,8 @@
--- run per round, set search_path to round, raw
+-- Build one round's working tables. Run with search_path set to (round, raw)
+-- so unqualified names (labels, transactions, userlogs) resolve to the round
+-- schema while raw.* stays explicit. Params: %(cutoff)s, %(lookback_days)s
+-- from config.ROUNDS. CREATE TABLE has no DROP IF EXISTS on purpose:
+-- reruns fail fast instead of silently wiping round data.
 
 BEGIN;
 

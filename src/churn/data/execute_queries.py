@@ -5,80 +5,23 @@ from datetime import date
 from pathlib import Path
 from psycopg import sql
 
-from churn.config import DATA_DSN
+from churn.config import (DATA_DSN, CHUNK, WORK_MEM, SYNCHRONOUS_COMMIT,
+    CREATE_SCHEMAS, RAW_LOADS, RAW_SCHEMA, SCHEMAS,
+    COLS, DATA, RANGES, COVERAGE, ROUNDS, LOAD_ROUND, BUILD_FEATURES, RESET
+)
 
 
-
-SQL_DIR = Path(__file__).parent
-#sql files names
-CREATE_SCHEMAS = "create_schemas.sql"
-LOAD_ROUND = "load_round.sql"
-RESET = "reset.sql"
-BUILD_FEATURES = "build_features.sql"
-
-DATA = Path("data/raw")
-CHUNK = 16 * 1024 * 1024
-
-# lookback_days must be >= the longest window used in build_features.sql (90 days).
-ROUNDS = {
-    "r1": {
-        "cutoff": "2017-01-31",
-        "lookback_days": 90,
-        "labels": "train.csv",
-        "win_end" : "2017-02-28"
-        },
-    "r2": {
-        "cutoff": "2017-02-28",
-        "lookback_days": 90,
-        "labels": "test/churn_comp_refresh/train_v2.csv",
-        "win_end" : "2017-03-31"
-        },
-}
-
-# COPY maps columns by position: these lists must match the CSV column order.
-COLS = {
-    "labels":       ["msno", "ischurn"],
-    "members":      ["msno", "city", "bd", "gender", "registeredvia", "registrationinitdate"],
-    "transactions": ["msno", "paymentmethodid", "paymentplandays", "planlistprice",
-                     "actualamountpaid", "isautorenew", "transactiondate",
-                     "membershipexpiredate", "iscancel"],
-    "userlogs":     ["msno", "logdate", "num25", "num50", "num75",
-                     "num985", "num100", "numunq", "totalsecs"],
-}
-
-# userlogs last (huge)
-RAW_LOADS = [
-    ("raw.members",         "members",      "members_v3.csv"),
-    ("raw.transactions_v2", "transactions", "test/churn_comp_refresh/transactions_v2.csv"),
-    ("raw.transactions_v1", "transactions", "transactions.csv"),
-    ("raw.userlogs",        "userlogs",     "user_logs.csv"),
-]
-
-RANGES = """
-SELECT 'labels' AS tbl, COUNT(*) AS n, NULL::date AS min_d, NULL::date AS max_d FROM labels
-UNION ALL SELECT 'transactions', COUNT(*), MIN(transactiondate), MAX(transactiondate) FROM transactions
-UNION ALL SELECT 'userlogs',     COUNT(*), MIN(logdate),         MAX(logdate)         FROM userlogs
-"""
-COVERAGE = """
-SELECT COUNT(*)           AS labeled_users,
-       COUNT(t.msno)      AS with_trans,
-       COUNT(u.msno)      AS with_logs,
-       COUNT(m.msno)      AS with_member,
-       AVG(l.ischurn::int) AS churn_rate
-FROM labels l
-LEFT JOIN (SELECT DISTINCT msno FROM transactions) t USING (msno)
-LEFT JOIN (SELECT DISTINCT msno FROM userlogs)     u USING (msno)
-LEFT JOIN raw.members m USING (msno)
-"""
+SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 
 
 
 def connect(*schemas, **kwargs):
     conn = psycopg.connect(DATA_DSN, autocommit=True, **kwargs)
     path = sql.SQL(", ").join(map(sql.Identifier, schemas))
-    # switch to schema
+    # switch to schema; callers pass (round, RAW_SCHEMA) so that
+    # unqualified names resolve to the round schema and raw.* stays explicit.
     conn.execute(sql.SQL("SET search_path TO {}").format(path))
-    conn.execute("SET synchronous_commit = off")
+    conn.execute(sql.SQL("SET synchronous_commit TO {}").format(sql.Literal(SYNCHRONOUS_COMMIT)))
     return conn
 
 
@@ -104,7 +47,7 @@ def init():
 
 
 def load_raw():
-    with connect("raw") as c:
+    with connect(RAW_SCHEMA) as c:
         for table, key, fname in RAW_LOADS:
             ident = sql.Identifier(*table.split("."))
             c.execute(sql.SQL("TRUNCATE {}").format(ident))      # makes retries safe
@@ -125,13 +68,15 @@ def check_round(c, cutoff: date):
 
 def build_round(schema):
     config = ROUNDS[schema]
-    with connect(schema, "raw") as c:
+    with connect(schema, RAW_SCHEMA) as c:
         c.execute("TRUNCATE labels")        
         n = copy_csv(c, "labels", COLS["labels"], DATA / config["labels"])
         print(f"{schema}.labels: {n:,} rows")
-    # client-side binding: the build SQL has parameters and several statements
-    with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
-        c.execute("SET work_mem = '512MB'")
+    # client-side binding: the build SQL has parameters and several statements.
+    # load_round.sql uses CREATE TABLE without DROP: reruns fail fast on purpose
+    # so raw/round tables are never silently wiped (only train_features may be dropped).
+    with connect(schema, RAW_SCHEMA, cursor_factory=psycopg.ClientCursor) as c:
+        c.execute(sql.SQL("SET work_mem TO {}").format(sql.Literal(WORK_MEM)))
         run_sql_file(c, LOAD_ROUND,
                      {"cutoff": config["cutoff"], "lookback_days": config["lookback_days"]})
         check_round(c, date.fromisoformat(config["cutoff"]))
@@ -140,13 +85,14 @@ def build_round(schema):
 
 def build_features(schema):
     config = ROUNDS[schema]
-    with connect(schema, "raw", cursor_factory=psycopg.ClientCursor) as c:
-        c.execute("SET work_mem = '512MB'")
+    with connect(schema, RAW_SCHEMA, cursor_factory=psycopg.ClientCursor) as c:
+        c.execute(sql.SQL("SET work_mem TO {}").format(sql.Literal(WORK_MEM)))
         run_sql_file(c, BUILD_FEATURES, {"cutoff": config["cutoff"], "win_end" : config["win_end"]})
 
 
 def reset():
-    if input("Drops schemas raw, r1, r2 and all their data. Type 'yes': ") != "yes":
+    schemas = ", ".join([RAW_SCHEMA, *SCHEMAS])
+    if input(f"Drops schemas {schemas} and all their data. Type 'yes': ") != "yes":
         return
     with connect("public") as c:
         run_sql_file(c, RESET)
