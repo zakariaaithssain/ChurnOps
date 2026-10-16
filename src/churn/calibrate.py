@@ -1,7 +1,9 @@
+import argparse
+import joblib
+
 from pathlib import Path
 from typing import Literal
 
-import joblib
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.frozen import FrozenEstimator
@@ -92,3 +94,25 @@ def calibrate_model(model: ModelName, methods: tuple = CALIB_METHODS) -> dict:
     joblib.dump(fitted, out)
 
 
+
+
+if __name__ == "__main__": 
+
+    ap = argparse.ArgumentParser(description="split r2 calib/test + fit prefit calibrators (thin wrapper over churn.calibrate)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p_split = sub.add_parser("split", help="stratified r2 split via split_r2_calib_test")
+    p_split.add_argument("--r2-features", default=str(FEATURES["r2"]))
+    p_split.add_argument("--calib-frac", type=float, default=R2_CALIB_FRAC)
+    p_split.add_argument("--seed", type=int, default=SEED)
+    p_split.add_argument("--overwrite", action="store_true")
+
+    p_cal = sub.add_parser("calibrate", help="fit prefit calibrators via calibrate_model")
+    p_cal.add_argument("--model", choices=["logireg", "lgbm"], required=True)
+    p_cal.add_argument("--methods", nargs="+", choices=list(CALIB_METHODS), default=list(CALIB_METHODS))
+
+    args = ap.parse_args()
+    if args.cmd == "split":
+        split_r2_calib_test(Path(args.r2_features), args.calib_frac, args.seed, args.overwrite)
+    if args.cmd == "calibrate":
+        calibrate_model(args.model, tuple(args.methods))

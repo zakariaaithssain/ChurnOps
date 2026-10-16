@@ -5,24 +5,25 @@ from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 
 from churn.config import ARTIFACTS_DIR, FEATURES, ROUNDS, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
-from churn.calibrate import run_calibration
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
 from churn.metrics import calculate_oof_metrics
 from churn.create_studies import run_lightgbm_study, run_logireg_study
 from churn.create_pipelines import refit_save_best_pipeline
+from churn.calibrate import calibrate_model, split_r2_calib_test
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="hyperparam tune + refit Logistic Regression and LightGBM on KKBOX round data (r1=train, r2=test)")
     ap.add_argument("--schema", choices=list(ROUNDS), default="r1", help="round to train on (features/ win_len come from config.ROUNDS)")
-    ap.add_argument("--data-file", default=None, help="override parquet path (default: config.FEATURES[schema])")
+    ap.add_argument("--data-file", default=None, help="override parquet path (default in config.FEATURES[schema])")
     ap.add_argument("--save-path", default=str(ARTIFACTS_DIR))
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--skip-logreg", action="store_true")
     ap.add_argument("--skip-lgbm", action="store_true")
-    ap.add_argument("--calibrate", action="store_true",
-                    help="after training, fit prefit calibrators on the r2-calib split and evaluate on r2-test")
+    ap.add_argument("--split-r2", action="store_true", help="split r2 features into calib/test via split_r2_calib_test")
+    ap.add_argument("--overwrite-split", action="store_true", help="overwrite existing r2 calib/test split")
+    ap.add_argument("--calibrate", nargs="*", choices=["logireg", "lgbm"], default=None, help="calibrate given models via calibrate_model (default: all trained in this run)")
     args = ap.parse_args(argv)
 
     out = Path(args.save_path)
@@ -77,19 +78,18 @@ def main(argv=None):
         summary["n_trials"]["lgbm"] = len(lgbm_study.trials)
         write_summary = True
         trained.append("lgbm")
-
-    if args.calibrate:
-        if not trained:
-            print("nothing trained, skipping calibration")
-        else:
-            if args.schema == "r2":
-                print("warning: base pipelines trained on r2, calibrating on an r2 subset is optimistic")
-            summary["calibration"] = run_calibration(models=tuple(trained))
-            write_summary = True
-
     if write_summary:
         (out / "train_summary.json").write_text(json.dumps(summary, indent=2))
         print("wrote summary", out)
+
+    # calibration
+    if args.split_r2:
+        split_r2_calib_test(seed=args.seed, overwrite=args.overwrite_split)
+
+    if args.calibrate is not None:
+        for _model in (args.calibrate or list(trained)):
+            calibrate_model(_model)
+
 
 
 if __name__ == "__main__":
