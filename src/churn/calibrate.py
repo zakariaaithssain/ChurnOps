@@ -15,11 +15,11 @@ from churn.create_pipelines import coerce_lgbm_dtypes, engineer_lr_features
 
 
 
-
 ModelName = Literal["logireg", "lgbm"]
 CalibMethod = Literal["sigmoid", "isotonic"]
 
 R2_WIN_LEN = ROUNDS["r2"]["win_len"]
+
 
 
 def split_r2_calib_test(r2_features: Path = FEATURES["r2"],
@@ -57,25 +57,18 @@ def split_r2_calib_test(r2_features: Path = FEATURES["r2"],
 
 
 
-def load_pipeline(model: ModelName):
-    pipeline_file = ARTIFACTS_DIR / f"{model}_pipeline.joblib"
-    if not pipeline_file.is_file():
-        raise FileNotFoundError(f"{pipeline_file} does not exist, did you save {model} best pipeline?")
-    return joblib.load(pipeline_file)
-
-
-
-def prepare_X(model: ModelName, X: pd.DataFrame) -> pd.DataFrame:
-    """apply the model's training-time transformations to raw X.  
-    X must be the raw feature frame (df.drop(columns = ["label", "msno"]))"""
-    if model == "logireg":
-        return engineer_lr_features(X, R2_WIN_LEN)
-    return coerce_lgbm_dtypes(X)
-
-
 
 def calibrate_model(model: ModelName, methods: tuple = CALIB_METHODS) -> dict:
     """calibrate and save model per calibration method"""
+
+
+    def _prepare_X(model: ModelName, X: pd.DataFrame) -> pd.DataFrame:
+        """apply the model's training-time transformations to raw X.  
+        X must be the raw feature frame (df.drop(columns = ["label", "msno"]))"""
+        if model == "logireg":
+            return engineer_lr_features(X, R2_WIN_LEN)
+        return coerce_lgbm_dtypes(X)
+
 
     def _fit_calibrator(model: ModelName, method: CalibMethod):
         """fit a prefit calibrator on the calib split (base estimator untouched).
@@ -90,8 +83,9 @@ def calibrate_model(model: ModelName, methods: tuple = CALIB_METHODS) -> dict:
         pipeline = joblib.load(pipeline_file)
 
         calibrator = CalibratedClassifierCV(FrozenEstimator(pipeline, method=method))
-        calibrator.fit(prepare_X(model, X_calib), y_calib)
+        calibrator.fit(_prepare_X(model, X_calib), y_calib)
         return calibrator
+
 
     fitted = {m: _fit_calibrator(model, m) for m in methods}
     out = ARTIFACTS_DIR / f"calib_{model}_pipeline.joblib"

@@ -1,3 +1,4 @@
+import joblib
 import pandas as pd 
 
 from pathlib import Path
@@ -9,7 +10,6 @@ from sklearn.preprocessing import QuantileTransformer, SplineTransformer, OneHot
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.base import TransformerMixin, BaseEstimator
-
 from lightgbm import LGBMClassifier
 
 from churn.config import CATEGORICAL, SEED, N_JOBS
@@ -125,7 +125,6 @@ class LightGBMPipeline:
         
 # helpers 
 
-
 # custom Transformer for Lumping rare categories to "Other"
 # for each categ feature, group classes that occur less than min_count into "Other" 
 # "missing" are always kept even if less than min_count. 
@@ -188,6 +187,11 @@ def coerce_lgbm_dtypes(X: pd.DataFrame) -> pd.DataFrame:
     base = X.columns.difference(CATEGORICAL)
     X[base] = X[base].astype("float64")  # guards against Decimal columns from Postgres
     return X
+
+
+def refit_save_best_pipeline(best_pipeline, X, y, save_path: Path, prefix: str):
+    best_pipeline.fit(X, y)
+    joblib.dump(best_pipeline, save_path / f"{prefix}_pipeline.joblib")
 
 
 

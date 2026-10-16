@@ -7,8 +7,9 @@ from sklearn.model_selection import StratifiedKFold
 from churn.config import ARTIFACTS_DIR, FEATURES, ROUNDS, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
 from churn.calibrate import run_calibration
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
-from churn.metrics import calculate_oof_metrics, refit_save_best_pipeline
+from churn.metrics import calculate_oof_metrics
 from churn.create_studies import run_lightgbm_study, run_logireg_study
+from churn.create_pipelines import refit_save_best_pipeline
 
 
 def main(argv=None):
