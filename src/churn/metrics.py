@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import joblib
+import numpy as np
 from sklearn.metrics import average_precision_score, log_loss
 from sklearn.model_selection import cross_val_predict
 
@@ -9,6 +10,27 @@ def oof_scores(y_true, probas) -> dict:
     return {
         "logloss": float(log_loss(y_true, probas)),
         "pr_auc": float(average_precision_score(y_true, probas)),
+    }
+
+
+def expected_calibration_error(y_true, probas, n_bins: int = 10) -> float:
+    """Mean |accuracy - confidence| weighted by bin mass (uniform bins)."""
+    y_true = np.asarray(y_true)
+    probas = np.asarray(probas)
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    idx = np.clip(np.digitize(probas, edges[1:-1]), 0, n_bins - 1)
+    ece = 0.0
+    for b in range(n_bins):
+        m = idx == b
+        if m.any():
+            ece += m.mean() * abs(y_true[m].mean() - probas[m].mean())
+    return float(ece)
+
+
+def calibration_scores(y_true, probas, n_bins: int = 10) -> dict:
+    return {
+        **oof_scores(y_true, probas),
+        "ece": expected_calibration_error(y_true, probas, n_bins),
     }
 
 

@@ -7,7 +7,7 @@ from psycopg import sql
 
 from churn.config import (DATA_DSN, CHUNK, WORK_MEM, SYNCHRONOUS_COMMIT,
     CREATE_SCHEMAS, RAW_LOADS, RAW_SCHEMA, SCHEMAS,
-    COLS, DATA, RANGES, COVERAGE, ROUNDS, LOAD_ROUND, BUILD_FEATURES, RESET
+    COLS, RAW_DATA, RANGES, COVERAGE, ROUNDS, LOAD_ROUND, BUILD_FEATURES, RESET
 )
 
 
@@ -51,7 +51,7 @@ def load_raw():
         for table, key, fname in RAW_LOADS:
             ident = sql.Identifier(*table.split("."))
             c.execute(sql.SQL("TRUNCATE {}").format(ident))      # makes retries safe
-            n = copy_csv(c, table, COLS[key], DATA / fname)
+            n = copy_csv(c, table, COLS[key], RAW_DATA / fname)
             c.execute(sql.SQL("ANALYZE {}").format(ident))
             print(f"{table}: {n:,} rows  (compare with: wc -l {fname}, minus 1)")
 
@@ -70,7 +70,7 @@ def build_round(schema):
     config = ROUNDS[schema]
     with connect(schema, RAW_SCHEMA) as c:
         c.execute("TRUNCATE labels")        
-        n = copy_csv(c, "labels", COLS["labels"], DATA / config["labels"])
+        n = copy_csv(c, "labels", COLS["labels"], RAW_DATA / config["labels"])
         print(f"{schema}.labels: {n:,} rows")
     # client-side binding: the build SQL has parameters and several statements.
     # load_round.sql uses CREATE TABLE without DROP: reruns fail fast on purpose

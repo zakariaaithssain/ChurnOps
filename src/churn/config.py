@@ -4,9 +4,12 @@ import os
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
-DATA = DATA_DIR / "raw"
+RAW_DATA = DATA_DIR / "raw"
 ARTIFACTS_DIR = ROOT / "artifacts"
-
+CALIB_DATA = DATA_DIR / "r2_calib_data.joblib"
+TEST_DATA = DATA_DIR / "r2_test_data.joblib"
+R2_CALIB_FRAC = 0.2
+CALIB_METHODS = ("sigmoid", "isotonic")
 SCHEMAS = ['r1', 'r2']
 RAW_SCHEMA = "raw"
 DATA_DSN = os.getenv("CHURN_DATA_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox_data")
@@ -22,7 +25,7 @@ WORK_MEM = "512MB"
 SYNCHRONOUS_COMMIT = "off"
 
 # lookback_days must be >= the longest window used in build_features.sql (90 days).
-# labels are relative to DATA. features are relative to DATA_DIR.
+# labels are relative to RAW_DATA. features are relative to DATA_DIR.
 # win_len is the label-window length in days, kept per round next to win_end.
 # r1 is train, r2 is test. user_logs_v2.csv is intentionally unused:
 # both rounds reuse the shared user_logs.csv filtered by cutoff.

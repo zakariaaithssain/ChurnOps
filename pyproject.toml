@@ -16,6 +16,7 @@ dependencies = [
     "optuna>=5.0.0",
     "pandas>=3.0.6",
     "psycopg[binary,pool]>=3.3.6",
+    "ruff>=0.17.1",
     "scikit-learn>=1.9.1",
     "seaborn>=0.13.2",
 ]

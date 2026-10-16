@@ -5,6 +5,7 @@ from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 
 from churn.config import ARTIFACTS_DIR, FEATURES, ROUNDS, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
+from churn.calibrate import run_calibration
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
 from churn.metrics import calculate_oof_metrics, refit_save_best_pipeline
 from churn.create_studies import run_lightgbm_study, run_logireg_study
@@ -19,6 +20,8 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--skip-logreg", action="store_true")
     ap.add_argument("--skip-lgbm", action="store_true")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="after training, fit prefit calibrators on the r2-calib split and evaluate on r2-test")
     args = ap.parse_args(argv)
 
     out = Path(args.save_path)
@@ -34,6 +37,7 @@ def main(argv=None):
     summary: dict = {"schema": args.schema, "data_file": str(data_path), "folds": args.folds, "n_trials": {}, "seed": args.seed}
 
     write_summary = False
+    trained: list = []
 
     if not args.skip_logreg:
         builder = LogisticRegressionPipeline(filepath=data_path, window_len=window_len)
@@ -52,6 +56,7 @@ def main(argv=None):
         summary["logireg"] = {"params": logireg_best_hyperp, "best_neg_log_loss": logireg_study.best_value, **logireg_scores}
         summary["n_trials"]["logireg"] = len(logireg_study.trials)
         write_summary = True
+        trained.append("logireg")
 
     if not args.skip_lgbm:
         builder = LightGBMPipeline(filepath=data_path)
@@ -70,9 +75,19 @@ def main(argv=None):
         summary["lgbm"] = {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, **lgbm_scores}
         summary["n_trials"]["lgbm"] = len(lgbm_study.trials)
         write_summary = True
+        trained.append("lgbm")
+
+    if args.calibrate:
+        if not trained:
+            print("nothing trained, skipping calibration")
+        else:
+            if args.schema == "r2":
+                print("warning: base pipelines trained on r2, calibrating on an r2 subset is optimistic")
+            summary["calibration"] = run_calibration(models=tuple(trained))
+            write_summary = True
 
     if write_summary:
-        (out / "summary.json").write_text(json.dumps(summary, indent=2))
+        (out / "train_summary.json").write_text(json.dumps(summary, indent=2))
         print("wrote summary", out)
 
 

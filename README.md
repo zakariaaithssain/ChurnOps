@@ -112,7 +112,7 @@ Windows: 7d, 30d and 90d are nested, since 90d contains 30d, which contains 7d. 
 
 ## results:
 
-Pooled out-of-fold on `r1`, 5-fold stratified (`seed=37`), from `artifacts/summary.json`:
+Pooled out-of-fold on `r1`, 5-fold stratified (`seed=37`), from `artifacts/train_summary.json`:
 
 | model | logloss (lower better) | PR-AUC (higher better) | best params | trials |
 |---|---|---|---|---|

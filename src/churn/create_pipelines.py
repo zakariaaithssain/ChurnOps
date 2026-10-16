@@ -18,6 +18,7 @@ from churn.config import CATEGORICAL, SEED, N_JOBS
 # we avoid using class_weight (logiReg) or is_unbalance (lightgbm) as they will distort probabilities
 
 
+
 class LogisticRegressionPipeline: 
     def __init__(self, filepath : str, window_len : Literal[28, 30]): 
         self.filepath = filepath
@@ -79,27 +80,8 @@ class LogisticRegressionPipeline:
 
 
     def create_X_y(self): 
-        
         y = self.df['label']
-        X = self.df.drop(columns=['label', 'msno'])
-
-        # add engineered features: 
-        X['age_is_missing'] = X['age'].isna().astype(float)
-        X['is_plan_30'] = (X['last_plan_days'] == 30).astype(float)
-        X['is_city_1'] = (pd.to_numeric(X['city'], errors='coerce') == 1).astype(float)
-        X['dte_is_last_day'] = (X['days_to_expiry'] == self.window_len).astype(float)
-        X['has_cancel'] = (X['n_cancel'] > 0).astype(float)
-        X['has_no_autorenew'] = (X['n_no_autorenew'] > 0).astype(float)
-        X['has_discount'] = (X['n_discounted'] > 0).astype(float)
-        X['noauto_inactive'] = ((X["last_is_autorenew"] == 0) & (X["active_days_30d"] == 0)).astype(float)
-
-        # encode missingness
-        for cat in CATEGORICAL: 
-            X[cat] = X[cat].astype('string').fillna("MISSING")
-
-        base = X.columns.difference(CATEGORICAL)
-        X[base] = X[base].astype("float64") 
-
+        X = engineer_lr_features(self.df.drop(columns=['label', 'msno']), self.window_len)
         return X, y
         
 
@@ -114,9 +96,7 @@ class LightGBMPipeline:
 
     def create_X_y(self):
         y = self.df["label"]
-        X = self.df.drop(columns=["label", "msno"])
-        base = X.columns.difference(CATEGORICAL) 
-        X[base] = X[base].astype("float64")  # guards against Decimal columns from Postgres
+        X = coerce_lgbm_dtypes(self.df.drop(columns=["label", "msno"]))
         return X, y
 
     def create_pipeline(
@@ -143,7 +123,7 @@ class LightGBMPipeline:
             )),
         ])
         
-
+# helpers 
 
 
 # custom Transformer for Lumping rare categories to "Other"
@@ -176,6 +156,38 @@ class LumpingTransformer(TransformerMixin, BaseEstimator):
 
 
 
+
+def engineer_lr_features(X: pd.DataFrame, window_len: int) -> pd.DataFrame:
+    """Add the EDA-derived LR flags + missingness encoding.
+    run on train, calibration, and test data. 
+    X must be the raw feature frame (df.drop(columns = ["label", "msno"])).
+    """
+    X = X.copy()
+    X['age_is_missing'] = X['age'].isna().astype(float)
+    X['is_plan_30'] = (X['last_plan_days'] == 30).astype(float)
+    X['is_city_1'] = (pd.to_numeric(X['city'], errors='coerce') == 1).astype(float)
+    X['dte_is_last_day'] = (X['days_to_expiry'] == window_len).astype(float)
+    X['has_cancel'] = (X['n_cancel'] > 0).astype(float)
+    X['has_no_autorenew'] = (X['n_no_autorenew'] > 0).astype(float)
+    X['has_discount'] = (X['n_discounted'] > 0).astype(float)
+    X['noauto_inactive'] = ((X["last_is_autorenew"] == 0) & (X["active_days_30d"] == 0)).astype(float)
+
+    # encode missingness
+    for cat in CATEGORICAL:
+        X[cat] = X[cat].astype('string').fillna("MISSING")
+
+    base = X.columns.difference(CATEGORICAL)
+    X[base] = X[base].astype("float64")
+    return X
+
+
+def coerce_lgbm_dtypes(X: pd.DataFrame) -> pd.DataFrame:
+    """Same numeric coercion as LightGBMPipeline.create_X_y (guards against
+    Decimal columns from Postgres); categoricals are handled by LumpingTransformer."""
+    X = X.copy()
+    base = X.columns.difference(CATEGORICAL)
+    X[base] = X[base].astype("float64")  # guards against Decimal columns from Postgres
+    return X
 
 
 
