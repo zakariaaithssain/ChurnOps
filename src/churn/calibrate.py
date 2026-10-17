@@ -95,6 +95,13 @@ def calibrate_model(model: ModelName, methods: tuple = CALIB_METHODS) -> dict:
 
 
 
+#orchestrator for main.py CLI 
+def run_calibration(overwrite_split: bool = False):
+    split_r2_calib_test(seed=SEED, overwrite=overwrite_split)
+    for _model in ["logireg", "lgbm"]:
+        calibrate_model(_model)
+
+
 
 if __name__ == "__main__": 
 
