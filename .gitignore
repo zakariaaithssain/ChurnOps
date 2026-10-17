@@ -10,5 +10,4 @@ wheels/
 .venv
 
 data/
-
-draft.ipynb
+artifacts/

@@ -84,7 +84,7 @@ def calibrate_model(model: ModelName, methods: tuple = CALIB_METHODS) -> dict:
             raise FileNotFoundError(f"{pipeline_file} does not exist, did you save {model} best pipeline?")
         pipeline = joblib.load(pipeline_file)
 
-        calibrator = CalibratedClassifierCV(FrozenEstimator(pipeline, method=method))
+        calibrator = CalibratedClassifierCV(FrozenEstimator(pipeline), method=method)
         calibrator.fit(_prepare_X(model, X_calib), y_calib)
         return calibrator
 
