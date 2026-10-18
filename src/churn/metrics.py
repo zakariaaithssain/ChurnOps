@@ -6,20 +6,20 @@ from sklearn.model_selection import cross_val_predict
 
 def logloss_and_pr_auc(y_true, probas) -> dict:
     return {
-        "logloss": log_loss(y_true, probas),
-        "pr_auc": average_precision_score(y_true, probas)
+        "pr_auc": round(average_precision_score(y_true, probas), 4),
+        "logloss": round(log_loss(y_true, probas), 4)
     }
 
 
 def brier_skill_score(bs: float, bs_ref: float) -> float:
-    """`1 - BS_model / BS_ref`, with the logistic regression Brier as ref.
+    """`1 - BS_model / BS_ref`, with the non calibrated logistic regression as ref.
 
     Takes scalar Brier scores (see brier_score). Positive means better
     than the reference, 0 equals it. NaN when the reference is perfect.
     """
     if bs_ref == 0:
-        return float("nan")
-    return 1.0 - bs / bs_ref
+        return None
+    return round(1.0 - bs / bs_ref, 4)
 
 
 def expected_calibration_error(y_true, probas, n_bins: int = 10) -> float:
@@ -33,16 +33,17 @@ def expected_calibration_error(y_true, probas, n_bins: int = 10) -> float:
         m = idx == b
         if m.any():
             ece += m.mean() * abs(y_true[m].mean() - probas[m].mean())
-    return float(ece)
+    return round(float(ece), 4)
 
 
 def calibration_scores(y_true, probas, n_bins: int = 10, ref_probas=None) -> dict:
     scores = {
+        "expected_calibration_error": expected_calibration_error(y_true, probas, n_bins),
         **logloss_and_pr_auc(y_true, probas),
-        "ece": expected_calibration_error(y_true, probas, n_bins),
+        "brier_loss" : round(brier_score_loss(y_true, probas), 4)
     }
     if ref_probas is not None:
-        scores["brier_skill_score_logireg_as_ref"] = brier_skill_score(scores["brier"], brier_score_loss(y_true, ref_probas))
+        scores["brier_skill_score_logireg_as_ref"] = brier_skill_score(scores["brier_loss"], brier_score_loss(y_true, ref_probas))
     return scores
 
 
