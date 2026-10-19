@@ -11,6 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastparquet>=2026.9.0",
     "git-filter-repo>=2.47.0",
+    "iprogress>=0.4",
     "ipykernel>=7.4.0",
     "lightgbm>=4.0.0",
     "matplotlib>=3.11.2",
@@ -20,6 +21,7 @@ dependencies = [
     "ruff>=0.17.1",
     "scikit-learn>=1.9.1",
     "seaborn>=0.13.2",
+    "shap>=0.54.1",
 ]
 
 [tool.setuptools.packages.find]
