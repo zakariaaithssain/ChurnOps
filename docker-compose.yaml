@@ -1,28 +1,45 @@
 services:
   postgres-db: 
-    image: postgres:latest
+    image: postgres:15-alpine 
     container_name: kkbox_db_container
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
-      - "kkbox_data:/var/lib/postgresql"
+      - kkbox_data:/var/lib/postgresql/data 
     environment:
-      - POSTGRES_PASSWORD=postgrespass
-      - POSTGRES_USER=kkbox
-      - POSTGRES_DB=kkbox_data
+      - POSTGRES_USER=${DB_USER:-kkbox}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgrespass}
+      - POSTGRES_DB=${DB_NAME:-postgres}
     restart: unless-stopped
   
   pgadmin-web: 
     image: dpage/pgadmin4:latest
     ports:
-      - "5050:80"
+      - "${PGADMIN_PORT:-5050}:80"
     container_name: pgadmin_container
     environment:
-      - PGADMIN_DEFAULT_EMAIL=zakaria04aithssain@gmail.com
-      - PGADMIN_DEFAULT_PASSWORD=pgadminpass
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-zakaria04aithssain@gmail.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-pgadminpass}
     depends_on:
       - postgres-db
+    restart: unless-stopped
 
-  
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.13.0
+    container_name: mlflow_container
+    restart: unless-stopped
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - /home/zeco/Projects/churn/artifacts:/home/zeco/Projects/churn/artifacts
+    depends_on:
+      - postgres-db
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${DB_USER:-kkbox}:${DB_PASSWORD:-postgrespass}@postgres-db:5432/${MLFLOW_DB_NAME:-mlflow_db}
+      --default-artifact-root /home/zeco/Projects/churn/artifacts
+      --host 0.0.0.0
+      --port 5000
+
 volumes:
   kkbox_data:

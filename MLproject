@@ -1,0 +1,7 @@
+name: KKBox_Churn_Prediction
+
+uv_env: pyproject.toml
+
+entry_points:
+  main:
+    command: "uv run main.py"

@@ -14,6 +14,17 @@ SCHEMAS = ['r1', 'r2']
 RAW_SCHEMA = "raw"
 DATA_DSN = os.getenv("CHURN_DATA_DSN", "postgresql://kkbox:postgrespass@localhost:5432/kkbox_data")
 
+CATEGORICAL = ["city", "registeredvia", "gender", "last_payment_method"]
+SEED = 37
+LR_OPTUNA_TRIALS = 20
+LGBM_OPTUNA_TRIALS = 100
+OPTUNA_DSN = os.getenv("OPTUNA_DSN", "postgresql://kkbox:postgrespass@localhost:5432/optuna_studies")
+N_JOBS = 8 # I have 8 physical cores
+
+MLFLOW_EXPERIMENT = "KKBox_Churn_Prediction"
+MLFLOW_PARENT_RUN = "Full_Training_Pipeline"
+
+
 #sql files names
 CREATE_SCHEMAS = "create_schemas.sql"
 LOAD_ROUND = "load_round.sql"
@@ -90,9 +101,3 @@ LEFT JOIN {RAW_SCHEMA}.members m USING (msno)
 
 
 
-CATEGORICAL = ["city", "registeredvia", "gender", "last_payment_method"]
-SEED = 37
-LR_OPTUNA_TRIALS = 20
-LGBM_OPTUNA_TRIALS = 100
-OPTUNA_DSN = os.getenv("OPTUNA_DSN", "postgresql://kkbox:postgrespass@localhost:5432/optuna_studies")
-N_JOBS = 8 # I have 8 physical cores

@@ -1,17 +1,17 @@
 import argparse
 import json
-from pathlib import Path
+import mlflow
+import mlflow.sklearn
 
+from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 
-from churn.config import ARTIFACTS_DIR, FEATURES, ROUNDS, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS
+from churn.config import ARTIFACTS_DIR, FEATURES, ROUNDS, SEED, LR_OPTUNA_TRIALS, LGBM_OPTUNA_TRIALS, MLFLOW_EXPERIMENT, MLFLOW_PARENT_RUN
 from churn.create_pipelines import LightGBMPipeline, LogisticRegressionPipeline
 from churn.metrics import brier_skill_score, calculate_oof_metrics
 from churn.create_studies import run_lightgbm_study, run_logireg_study
 from churn.create_pipelines import refit_save_best_pipeline
 from churn.calibrate import run_calibration
-
-
 
 
 def main(argv=None):
@@ -37,57 +37,89 @@ def main(argv=None):
     kfolds = StratifiedKFold(n_splits=args.folds, shuffle=True, random_state=SEED)
     data_path = Path(args.data_file) if args.data_file else FEATURES[args.schema]
     window_len = ROUNDS[args.schema]["win_len"]
-    # NOTE: studies use load_if_exists=True, so optimize(n_trials=N) appends N
-    # trials to whatever is already stored. Report actual cumulative totals,
-    # not the per-run request, otherwise the summary understates the budget
-    # after more than one invocation.
-    summary: dict = {"schema": args.schema, "data_file": str(data_path), "folds": args.folds, "n_trials": {}, "seed": SEED}
+    
+    #log global pipeline configurations to the Parent Run
+    mlflow.log_params({
+        "stage": args.stage,
+        "schema": args.schema,
+        "folds": args.folds,
+        "seed": SEED
+    })
 
-    #logistic regression
-    logireg_builder = LogisticRegressionPipeline(filepath=data_path, window_len=window_len)
-    X, y = logireg_builder.create_X_y()
+    summary: dict = {
+        "schema": args.schema,
+        "data_file": str(data_path),
+        "folds": args.folds,
+        "n_trials": {},
+        "seed": SEED
+        }
 
-    logireg_study = run_logireg_study(logireg_builder, X, y, kfolds, LR_OPTUNA_TRIALS)
-    logireg_best_hyperp = dict(logireg_study.best_params)
-    print(f"Logistic Regression best {logireg_best_hyperp} neg_log_loss={logireg_study.best_value:.4f}")
+    # ==========================================
+    # LOGISTIC REGRESSION (CHILD RUN 1)
+    # ==========================================
+    with mlflow.start_run(run_name="Logistic_Regression", nested=True):
+        logireg_builder = LogisticRegressionPipeline(filepath=data_path, window_len=window_len)
+        X, y = logireg_builder.create_X_y()
 
-    logireg_best_pipe = logireg_builder.create_pipeline(**logireg_best_hyperp)
-    refit_save_best_pipeline(logireg_best_pipe, X, y, out, "logireg")
+        logireg_study = run_logireg_study(logireg_builder, X, y, kfolds, LR_OPTUNA_TRIALS)
+        logireg_best_hyperp = dict(logireg_study.best_params)
 
-    logireg_scores = calculate_oof_metrics(logireg_best_pipe, X, y, kfolds)
-    print(f"Logistic Regression out-of-fold probas: {logireg_scores}")
+        mlflow.log_params(logireg_best_hyperp)
+        mlflow.log_metric("best_neg_log_loss", logireg_study.best_value)
+        mlflow.log_metric("optuna_trials", len(logireg_study.trials))
 
-    summary["logireg"] = {"params": logireg_best_hyperp, "best_neg_log_loss": logireg_study.best_value, **logireg_scores}
-    summary["n_trials"]["logireg"] = len(logireg_study.trials)
+        logireg_best_pipe = logireg_builder.create_pipeline(**logireg_best_hyperp)
+        refit_save_best_pipeline(logireg_best_pipe, X, y, out, "logireg")
+        logireg_oof_scores = calculate_oof_metrics(logireg_best_pipe, X, y, kfolds)
 
-    #lightgbm
-    lgbm_builder = LightGBMPipeline(filepath=data_path)
-    X, y = lgbm_builder.create_X_y()
+        mlflow.log_metrics(logireg_oof_scores)
+        mlflow.sklearn.log_model(logireg_best_pipe, artifact_path="model")
 
-    lgbm_study = run_lightgbm_study(lgbm_builder, X, y, kfolds, LGBM_OPTUNA_TRIALS)
-    lgbm_best_hyperp = dict(lgbm_study.best_params)
-    print(f"LightGBM best {lgbm_best_hyperp} neg_log_loss={lgbm_study.best_value:.4f}")
+        summary["logireg"] = {"params": logireg_best_hyperp, "best_neg_log_loss": logireg_study.best_value, **logireg_oof_scores}
+        summary["n_trials"]["logireg"] = len(logireg_study.trials)
 
-    lgbm_best_pipe = lgbm_builder.create_pipeline(**lgbm_best_hyperp)
-    refit_save_best_pipeline(lgbm_best_pipe, X, y, out, "lgbm")
+    # ==========================================
+    # LIGHTGBM (CHILD RUN 2)
+    # ==========================================
+    with mlflow.start_run(run_name="LightGBM", nested=True):
+        lgbm_builder = LightGBMPipeline(filepath=data_path)
+        X, y = lgbm_builder.create_X_y()
 
-    lgbm_scores = calculate_oof_metrics(lgbm_best_pipe, X, y, kfolds)
-    print(f"LightGBM out-of-fold probas: {lgbm_scores}")
+        lgbm_study = run_lightgbm_study(lgbm_builder, X, y, kfolds, LGBM_OPTUNA_TRIALS)
+        lgbm_best_hyperp = dict(lgbm_study.best_params)
+        print(f"LightGBM best {lgbm_best_hyperp} neg_log_loss={lgbm_study.best_value:.4f}")
 
-    summary["lgbm"] = {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, **lgbm_scores}
-    summary["n_trials"]["lgbm"] = len(lgbm_study.trials)
+        mlflow.log_params(lgbm_best_hyperp)
+        mlflow.log_metric("best_neg_log_loss", lgbm_study.best_value)
+        mlflow.log_metric("optuna_trials", len(lgbm_study.trials))
 
+        lgbm_best_pipe = lgbm_builder.create_pipeline(**lgbm_best_hyperp)
+        refit_save_best_pipeline(lgbm_best_pipe, X, y, out, "lgbm")
+        lgbm_oof_scores = calculate_oof_metrics(lgbm_best_pipe, X, y, kfolds)
+
+        mlflow.log_metrics(lgbm_oof_scores)
+        mlflow.sklearn.log_model(lgbm_best_pipe, artifact_path="model")
+
+        summary["lgbm"] = {"params": lgbm_best_hyperp, "best_neg_log_loss": lgbm_study.best_value, **lgbm_oof_scores}
+        summary["n_trials"]["lgbm"] = len(lgbm_study.trials)
+
+    # ==========================================
+    # CROSS-MODEL SUMMARY
+    # ==========================================
     summary["logireg"]["brier_skill_score_logireg_as_ref"] = 0.0
     summary["lgbm"]["brier_skill_score_logireg_as_ref"] = brier_skill_score(summary["lgbm"]["brier"], summary["logireg"]["brier"])
-
-    (out / "train_summary.json").write_text(json.dumps(summary, indent=2))
+    summary_file = out / "train_summary.json"
+    summary_file.write_text(json.dumps(summary, indent=2))
+    mlflow.log_artifact(str(summary_file))
     print("wrote summary", out)
-
+    
     # calibration after train
     if args.stage == "all":
         run_calibration(args.overwrite_split)
 
 
-
 if __name__ == "__main__":
-    main()
+    mlflow.set_tracking_uri("http://localhost:5000")
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    with mlflow.start_run(run_name=MLFLOW_PARENT_RUN):
+        main()

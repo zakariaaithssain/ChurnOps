@@ -15,6 +15,7 @@ dependencies = [
     "ipykernel>=7.4.0",
     "lightgbm>=4.0.0",
     "matplotlib>=3.11.2",
+    "mlflow>=3.17.1",
     "optuna>=5.0.0",
     "pandas>=3.0.6",
     "psycopg[binary,pool]>=3.3.6",
