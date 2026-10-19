@@ -1,17 +1,18 @@
 import numpy as np
 
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss
-from sklearn.model_selection import cross_val_predict
+
+from churn.create_pipelines import calculate_oof_preds
 
 
 def logloss_and_pr_auc(y_true, probas) -> dict:
     return {
         "pr_auc": round(average_precision_score(y_true, probas), 4),
-        "logloss": round(log_loss(y_true, probas), 4)
+        "logloss": round(log_loss(y_true, probas), 4),
     }
 
 
-def brier_skill_score(bs: float, bs_ref: float) -> float:
+def brier_skill_score(bs: float, bs_ref: float) -> float | None:
     """`1 - BS_model / BS_ref`, with the non calibrated logistic regression as ref.
 
     Takes scalar Brier scores (see brier_score). Positive means better
@@ -38,19 +39,20 @@ def expected_calibration_error(y_true, probas, n_bins: int = 10) -> float:
 
 def calibration_scores(y_true, probas, n_bins: int = 10, ref_probas=None) -> dict:
     scores = {
-        "expected_calibration_error": expected_calibration_error(y_true, probas, n_bins),
+        "expected_calibration_error": expected_calibration_error(
+            y_true, probas, n_bins
+        ),
         **logloss_and_pr_auc(y_true, probas),
-        "brier_loss" : round(brier_score_loss(y_true, probas), 4)
+        "brier_loss": round(brier_score_loss(y_true, probas), 4),
     }
     if ref_probas is not None:
-        scores["brier_skill_score_logireg_as_ref"] = brier_skill_score(scores["brier_loss"], brier_score_loss(y_true, ref_probas))
+        scores["brier_skill_score_logireg_as_ref"] = brier_skill_score(
+            scores["brier_loss"], brier_score_loss(y_true, ref_probas)
+        )
     return scores
 
 
-
 def calculate_oof_metrics(best_pipeline, X, y, kfolds) -> dict:
-    """ **at each cross validation round**, we calculate the probas of the model on the **out-of-fold** samples, 
-    then concatenate the results to one vector of same shape as `y`
-    """ 
-    oof_concat_probas = cross_val_predict(best_pipeline, X, y, cv=kfolds, method="predict_proba")[:, 1]
+    """calculate log loss and pr_auc between `y` and out of fold preds"""
+    oof_concat_probas = calculate_oof_preds(best_pipeline, X, y, kfolds)
     return logloss_and_pr_auc(y, oof_concat_probas)

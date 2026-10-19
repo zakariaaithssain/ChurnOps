@@ -29,8 +29,8 @@ def _pruned_cv_neg_log_loss(trial: Trial, estimator, X, y, kfolds) -> float:
 
 def run_logireg_study(builder, X, y, kfolds, n_trials=LR_OPTUNA_TRIALS):
     def _lireg_objective(trial: Trial):
-        C = trial.suggest_float('C', 1e-3, 1, log=True)
-        spline_n_knots = trial.suggest_int('n_knots', 4, 8)
+        C = trial.suggest_float("C", 1e-3, 1, log=True)
+        spline_n_knots = trial.suggest_int("n_knots", 4, 8)
 
         estimator = builder.create_pipeline(C=C, n_knots=spline_n_knots)
         return _pruned_cv_neg_log_loss(trial, estimator, X, y, kfolds)
@@ -40,9 +40,12 @@ def run_logireg_study(builder, X, y, kfolds, n_trials=LR_OPTUNA_TRIALS):
         pruner=PRUNER,
         study_name="logireg_study",
         storage=OPTUNA_DSN,
-        load_if_exists=True)
+        load_if_exists=True,
+    )
 
-    study.optimize(_lireg_objective, n_trials=n_trials, n_jobs = N_JOBS) #parallelize only for logireg, because it has none built in. 
+    study.optimize(
+        _lireg_objective, n_trials=n_trials, n_jobs=N_JOBS
+    )  # parallelize only for logireg, because it has none built in.
     return study
 
 
@@ -59,7 +62,8 @@ def run_lightgbm_study(builder, X, y, kfolds, n_trials=LGBM_OPTUNA_TRIALS):
             min_child_samples=min_child_samples,
             colsample_bytree=colsample_bytree,
             reg_alpha=reg_alpha,
-            reg_lambda=reg_lambda)
+            reg_lambda=reg_lambda,
+        )
         return _pruned_cv_neg_log_loss(trial, estimator, X, y, kfolds)
 
     study = optuna.create_study(
@@ -67,7 +71,10 @@ def run_lightgbm_study(builder, X, y, kfolds, n_trials=LGBM_OPTUNA_TRIALS):
         pruner=PRUNER,
         study_name="lgbm_study",
         storage=OPTUNA_DSN,
-        load_if_exists=True)
+        load_if_exists=True,
+    )
 
-    study.optimize(_lightgbm_objective, n_trials=n_trials) # don't use parallelism, already used in model level. 
+    study.optimize(
+        _lightgbm_objective, n_trials=n_trials
+    )  # don't use parallelism, already used in model level.
     return study

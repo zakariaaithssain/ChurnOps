@@ -11,4 +11,5 @@ wheels/
 
 data/
 artifacts/
-.ruff_cache
+.ruff_cache/
+evidently_workspace/
