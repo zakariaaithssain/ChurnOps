@@ -7,11 +7,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v3
         with:
           python-version: "3.14"
-      - run: uv sync
-      - run: uv run ruff check src/ 
-      - run: uv run ruff format --check src/ 
-      - run: uv run mypy src/
 
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run Ruff Linter (and autofix)
+        run: uv run ruff check --fix src/
+
+      - name: Run Ruff Formatter (autofix)
+        run: uv run ruff format src/
+
+      - name: Run Mypy Type Checker
+        run: uv run mypy src/

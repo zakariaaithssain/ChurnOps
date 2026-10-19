@@ -472,6 +472,11 @@ dependencies = [
     { name = "shap" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pre-commit" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fastparquet", specifier = ">=2026.9.0" },
@@ -490,6 +495,9 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "shap", specifier = ">=0.54.1" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pre-commit", specifier = ">=4.7.0" }]
 
 [[package]]
 name = "click"
