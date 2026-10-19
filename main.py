@@ -25,6 +25,14 @@ def main(argv=None):
     ap.add_argument("--overwrite-split", action="store_true", help="overwrite existing r2 calib/test split")
     args = ap.parse_args(argv)
 
+    #convert empty template strings into python None defaults
+    if argv:
+        argv = [arg for arg in argv if arg.strip() != ""]
+    args = ap.parse_args(argv)
+    if args.data_file == "": args.data_file = None
+    if args.save_path == "": args.save_path = str(ARTIFACTS_DIR)
+
+    #if only calibration
     if args.stage == "calib":
         run_calibration(args.overwrite_split)
         return

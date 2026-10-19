@@ -1,7 +1,35 @@
 name: KKBox_Churn_Prediction
-
-uv_env: pyproject.toml
-
 entry_points:
   main:
-    command: "uv run main.py"
+    parameters:
+      stage:
+        type: string
+        default: "all"
+        description: "Execution stage: 'train', 'calib', or 'all'"
+      overwrite-train:
+        type: flag
+        default: false
+      schema:
+        type: string
+        default: "r1"
+      data-file:
+        type: string
+        default: ""
+      save-path:
+        type: string
+        default: ""
+      folds:
+        type: int
+        default: 5
+      overwrite-split:
+        type: flag
+        default: false
+    command: >
+      python main.py 
+      --stage {stage}
+      {overwrite-train}
+      --schema {schema}
+      {data-file}
+      {save-path}
+      --folds {folds}
+      {overwrite-split}
