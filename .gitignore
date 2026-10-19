@@ -11,4 +11,4 @@ wheels/
 
 data/
 artifacts/
-.ruff_cache/artifacts/
+.ruff_cache

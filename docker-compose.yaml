@@ -9,7 +9,7 @@ services:
     environment:
       - POSTGRES_USER=${DB_USER:-kkbox}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-postgrespass}
-      - POSTGRES_DB=${DB_NAME:-postgres}
+      - POSTGRES_DB=${DB_NAME:-postgres} #default db
     restart: unless-stopped
   
   pgadmin-web: 

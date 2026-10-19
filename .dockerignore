@@ -1,0 +1,16 @@
+.git/
+.gitignore
+.dvc/
+.dvcignore
+dvc.lock
+dvc.yaml
+data/
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+*.egg-info/
+README.md
+*.ipynb
+
+artifacts/

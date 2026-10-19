@@ -1,0 +1,14 @@
+repos:
+  - repo: git@github.com:astral-sh/ruff-pre-commit.git  
+    rev: v0.15.16
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: git@github.com:pre-commit/mirrors-mypy.git   
+    rev: v2.1.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests]
+
