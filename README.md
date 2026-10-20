@@ -148,7 +148,19 @@ uv run main.py --stage monitor --inference-data path/to/inference.parquet
 uv run evidently ui --workspace evidently_workspace
 ```
 
----
+#### run using MLproject  
+we can also use MLFlow to run the exact commands available in the CLI: 
+```bash 
+#general command
+mlflow run . [-P arg=value] --env-manager=uv
+```
+**examples:**  
+```bash
+mlflow run . -P stage=monitor -P data-file=path/to/inference.parquet --env-manager=uv
+```
+```bash
+mlflow run . -P overwrite-train=True -P overwrite-split=True --env-manager=uv
+```
 
 #### main CLI Arguments
 

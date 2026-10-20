@@ -1,11 +1,14 @@
 name: KKBox_Churn_Prediction
+
+python_env: pyproject.toml
+
 entry_points:
   main:
     parameters:
       stage:
         type: string
-        default: "all"
-        description: "Execution stage: 'train', 'calib', or 'all'"
+        default: "train-calib"
+        description: "execution stage: 'train', 'calib', 'train-calib', or 'monitor'"
       overwrite-train:
         type: flag
         default: false
@@ -24,6 +27,10 @@ entry_points:
       overwrite-split:
         type: flag
         default: false
+      inference-data: 
+        type: string
+        default: ""
+        description: "inference data parquet filepath to run drift and classification tests on"
     command: >
       python main.py 
       --stage {stage}
