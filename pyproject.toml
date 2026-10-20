@@ -30,7 +30,6 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-packages = ["churn"]
 
 [dependency-groups]
 dev = [
